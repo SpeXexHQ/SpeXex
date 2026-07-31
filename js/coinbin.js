@@ -140,7 +140,7 @@ return typeof value === "string" && value !== "1";
 		$('#walletSendCoinLabel').text(unit);
 		$('.js-coin-unit').text(unit);
 		$('.js-coin-name').text(net.name || unit);
-		document.title = net.name + ' Wallet by rod-web-wallet';
+		document.title = 'SpeXex';
 		$('.coin-check').addClass('hidden');
 		$('.coin-check[data-coin="'+net.code+'"]').removeClass('hidden');
 		/* Spend form copy */

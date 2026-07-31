@@ -1,10 +1,10 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2026 SpaceXpanse
- * Fork-specific service worker for the SpaceXpanse ROD wallet.
+ * Fork-specific service worker for SpeXex.
  */
 
-const STATIC_CACHE_VERSION = "rod-wallet-static-v2.9.1-beta.1";
+const STATIC_CACHE_VERSION = "spexex-static-v2.9.1-beta.1";
 /* NOTE: cache.addAll() rejects the whole install if ANY entry 404s.
    The previous list referenced ./otc-test.html (removed from the repo),
    so the service worker never installed. It also omitted the OTC engine

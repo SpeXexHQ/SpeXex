@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright (c) SpaceXpanse contributors -->
 
-# rod-web-swap
+# SpeXex
 
 Static browser-based SpaceXpanse ROD wallet with an integrated experimental OTC swap engine.
 
@@ -24,7 +24,7 @@ The current shipped release is [`2.9.1-beta.1`](CHANGELOG.md).
 
 ## Overview
 
-[`rod-web-swap`](README.md) is a static, browser-based, non-custodial SpaceXpanse ROD wallet with an integrated OTC swap engine. It settles **ROD ↔ LTC** and **ROD ↔ DOGE** atomic swaps; the counter chain is chosen per swap and is cryptographically bound into the negotiated terms. Key generation and signing remain inside the browser, while selected chain operations use the SpaceXpanse ROD API and OTC coordination uses the ROD blockchain, Nostr relay messaging, and browser-native adaptor-signature logic.
+[`SpeXex`](README.md) is a static, browser-based, non-custodial SpaceXpanse ROD wallet with an integrated OTC swap engine. It settles **ROD ↔ LTC** and **ROD ↔ DOGE** atomic swaps; the counter chain is chosen per swap and is cryptographically bound into the negotiated terms. Key generation and signing remain inside the browser, while selected chain operations use the SpaceXpanse ROD API and OTC coordination uses the ROD blockchain, Nostr relay messaging, and browser-native adaptor-signature logic.
 
 The OTC subsystem is implemented directly in the main wallet shell through [`js/otc-app-ui.js`](js/otc-app-ui.js), [`js/otc-engine.js`](js/otc-engine.js), [`js/otc-nostr.js`](js/otc-nostr.js), and [`js/otc-swap.js`](js/otc-swap.js). The current runtime includes planned funding txids, pre-signed timelocked refunds, `PREPARED` settlement gating, automated refund monitoring, and persistent in-browser swap recovery, including portable recovery exports that restore live sessions and signed transactions without exporting wallet WIFs or local RPC credentials, as tracked in [`CHANGELOG.md`](CHANGELOG.md).
 
@@ -57,7 +57,7 @@ The OTC subsystem is implemented directly in the main wallet shell through [`js/
 
 ## Architecture at a glance
 
-The project follows a three-layer model that matches the technical specification in [`docs/technical_specification_rod_web_swap.pdf`](docs/technical_specification_rod_web_swap.pdf):
+The project follows a three-layer model that matches the technical specification captured in [`docs/technical_specification_rod_web_swap.pdf`](docs/technical_specification_rod_web_swap.pdf):
 
 - **Local browser sandbox / PWA client** — UI, state handling, wallet logic, and cryptographic execution run inside the browser
 - **ROD blockchain layer** — used as the decentralized orderbook and settlement-adjacent coordination layer

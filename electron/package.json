@@ -1,8 +1,8 @@
 {
-  "name": "rod-web-swap-electron",
+  "name": "spexex-electron",
   "version": "0.1.0",
   "private": true,
-  "description": "Electron wrapper for the static SpaceXpanse ROD wallet",
+  "description": "Electron wrapper for SpeXex, the static SpaceXpanse ROD wallet",
   "license": "Apache-2.0",
   "author": {
     "name": "SpaceXpanse",
@@ -31,8 +31,8 @@
     }
   },
   "build": {
-    "appId": "org.spacexpanse.wallet.rod.webswap",
-    "productName": "SpaceXpanse ROD Wallet",
+    "appId": "org.spacexpanse.spexex",
+    "productName": "SpeXex",
     "copyright": "Copyright © 2026 SpaceXpanse",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "directories": {

@@ -10,6 +10,7 @@ The format is inspired by Keep a Changelog and follows Semantic Versioning princ
 ## [Unreleased]
 
 ### Documentation
+- Renamed the current project/application identity to [`SpeXex`](README.md) across user-facing repository documentation, including [`README.md`](README.md), while intentionally preserving historical/provenance references such as [`docs/technical_specification_rod_web_swap.pdf`](docs/technical_specification_rod_web_swap.pdf) and audit material under [`proof/applied-cryptography-assessment/`](proof/applied-cryptography-assessment/).
 - Added concise Electron desktop-wrapper usage and build guidance to [`README.md`](README.md), including dependency install, local launch, smoke verification, target packaging commands, and host-specific packaging caveats for Windows, Linux, and macOS.
 - Refreshed Carbon Memory and maintainer workflow notes for the completed Electron wrapper implementation in [`docs/maintainer-wiki/concept-architecture-overview.md`](docs/maintainer-wiki/concept-architecture-overview.md), [`docs/maintainer-wiki/workflows.md`](docs/maintainer-wiki/workflows.md), and [`.kilocode/rules/memory-bank/`](.kilocode/rules/memory-bank/).
 - Added concise GitHub Actions desktop build/release notes to [`README.md`](README.md), refreshed CI/release workflow guidance in [`docs/maintainer-wiki/workflows.md`](docs/maintainer-wiki/workflows.md), and updated volatile Carbon Memory for the new automation surface.

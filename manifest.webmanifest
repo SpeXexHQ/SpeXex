@@ -1,7 +1,7 @@
 {
-  "name": "SpaceXpanse ROD Wallet 2.9.1-beta.1",
-  "short_name": "ROD Wallet",
-  "description": "Static browser-based SpaceXpanse ROD wallet 2.9.1-beta.1 for creating addresses, signing transactions, and broadcasting raw transactions.",
+  "name": "SpeXex 2.9.1-beta.1",
+  "short_name": "SpeXex",
+  "description": "SpeXex 2.9.1-beta.1 is a static browser-based SpaceXpanse ROD wallet for creating addresses, signing transactions, and broadcasting raw transactions.",
   "id": "./",
   "start_url": "./",
   "scope": "./",

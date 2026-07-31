@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2026 SpaceXpanse
- * Fork-specific OTC multi-chain helpers for the SpaceXpanse ROD wallet.
+ * Fork-specific OTC multi-chain helpers for SpeXex.
  */
 
 (function(){

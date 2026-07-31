@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2026 SpaceXpanse
- * Fork-specific OTC adaptor-signature module for the SpaceXpanse ROD wallet.
+ * Fork-specific OTC adaptor-signature module for SpeXex.
  */
 
 (function(){

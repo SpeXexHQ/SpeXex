@@ -1,7 +1,7 @@
 /*
 	SPDX-License-Identifier: Apache-2.0
 	Copyright 2026 SpaceXpanse
-	Fork-specific OTC swap engine for the SpaceXpanse ROD wallet.
+Fork-specific OTC swap engine for SpeXex.
 
 	otc-engine.js — Phase 2 swap engine.
 	Namespace: window.rodOtc.engine

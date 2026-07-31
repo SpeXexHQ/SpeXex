@@ -127,7 +127,7 @@ function createMainWindow() {
     autoHideMenuBar: true,
     show: false,
     backgroundColor: '#111827',
-    title: 'SpaceXpanse ROD Wallet',
+      title: 'SpeXex',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
