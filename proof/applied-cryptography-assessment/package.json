@@ -1,0 +1,13 @@
+{
+  "name": "rod-private-adaptor-proof-experiment",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "vectors": "node test/generate-vectors.mjs",
+    "test": "node test/verify-vectors.mjs && CROSS_CHECK_LIMIT=2 node test/cross-check-wallet.mjs"
+  },
+  "dependencies": {
+    "@noble/curves": "1.9.7"
+  }
+}
