@@ -54,7 +54,7 @@ $(function () {
 	/* ============ HTML ============ */
 	$root.html([
 		'<h2 id="otcTitle"><span id="otcTitleAsset">ROD</span> ↔ <span id="otcTitlePayment">LTC</span> OTC Swap</h2>',
-		'<div class="otc-rod-warn"><span class="glyphicon glyphicon-info-sign"></span> <b>ROD is the control plane</b> for identity, reputation, offer ownership and order publishing. The selected pair provides settlement.</div>',
+		'<div class="otc-rod-warn"><span class="glyphicon glyphicon-info-sign"></span> <b>Important</b><ul><li><b>ROD is the control plane</b> for identity, reputation, offer ownership and order publishing. The selected pair provides settlement.</li><li>This feature still needs a configured <b>ROD RPC wallet</b> with enough balance to cover transaction fees.</li><li>This feature is still <b>highly experimental</b> and should not be used to swap serious amounts.</li></ul></div>',
 		'<div id="otcWarn" class="alert alert-warning" style="display:none"><b>Wallet not loaded.</b> Open your wallet in the <a href="#" onclick="$(\'a[href=#wallet]\').tab(\'show\');return false">Wallet tab</a> first. Your wallet key is used for swap authentication and signing.</div>',
 		'<div id="otcWalletOk" class="alert alert-success" style="display:none"></div>',
 		'<div id="otcFlash" class="alert hidden"></div>',

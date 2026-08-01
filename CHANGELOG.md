@@ -10,6 +10,11 @@ The format is inspired by Keep a Changelog and follows Semantic Versioning princ
 ## [Unreleased]
 
 ### Changed
+- **Release identity bumped to `2.6.1-beta.0`.** The next patch beta now marks the shipped UI, manifest, service-worker cache identity, and Electron wrapper consistently for release packaging.
+
+## [2.6.1-beta.0] - 2026-08-01
+
+### Changed
 - **Release identity bumped to `2.6.0-alpha.3`.** The service-worker cache is invalidated for the reviewed registry, identity, Settings, and pair-matrix fixes.
 - **The browser settlement matrix now proves the architecture it advertises.** It discovers every ordered pair of distinct certified chains and runs happy settlement, asset refund, payment refund, and reload recovery for each pair. ROD remains a separate control plane when neither settlement leg is ROD.
 - **A single authoritative chain registry now controls onboarding.** [`js/chain-registry.js`](js/chain-registry.js) is the only shipped source for wallet parameters, explorer/API defaults, swap certification, refund timing, confirmation rules, canonical fees, relay/dust policy, and certification vectors. `coin.js`, `otc-chains.js`, the wallet menu, mock-chain validation, the end-to-end harness, and the full matrix derive their inputs from it. Adding another compatible chain no longer requires synchronized constants or chain lists across those consumers.

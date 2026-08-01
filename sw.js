@@ -4,7 +4,7 @@
  * Fork-specific service worker for the SpaceXpanse ROD wallet.
  */
 
-const STATIC_CACHE_VERSION = "rod-wallet-static-v2.6.0-alpha.3-registry-and-pair-matrix";
+const STATIC_CACHE_VERSION = "rod-wallet-static-v2.6.1-beta.0-registry-and-pair-matrix";
 /* NOTE: cache.addAll() rejects the whole install if ANY entry 404s.
    The previous list referenced ./otc-test.html (removed from the repo),
    so the service worker never installed. It also omitted the OTC engine
