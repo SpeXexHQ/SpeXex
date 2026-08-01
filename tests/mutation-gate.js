@@ -29,8 +29,10 @@ function copyProject() {
 
 function replaceOnce(file, before, after) {
 	const source = fs.readFileSync(file, 'utf8');
-	assert(source.includes(before), 'mutation target not found in ' + file + ': ' + before);
-	fs.writeFileSync(file, source.replace(before, after));
+	const normalizedSource = source.replace(/\r\n/g, '\n');
+	const normalizedBefore = before.replace(/\r\n/g, '\n');
+	assert(normalizedSource.includes(normalizedBefore), 'mutation target not found in ' + file + ': ' + before);
+	fs.writeFileSync(file, normalizedSource.replace(normalizedBefore, after.replace(/\r\n/g, '\n')));
 }
 
 function runTest(script, appDir) {
@@ -51,8 +53,8 @@ const mutants = [
 		mutate(appDir) {
 			replaceOnce(
 				path.join(appDir, 'js', 'otc-nostr.js'),
-				"if(!eventObject.sig || !schnorrVerify(eventObject.id, eventObject.pubkey, eventObject.sig)){\n\t\t\tthrow new Error('OTC Nostr event signature mismatch');",
-				"if(eventObject.sig && !schnorrVerify(eventObject.id, eventObject.pubkey, eventObject.sig)){\n\t\t\tthrow new Error('OTC Nostr event signature mismatch');"
+				"\t\tif(!eventObject.sig || !schnorrVerify(eventObject.id, eventObject.pubkey, eventObject.sig)){\n\t\t\tthrow new Error('OTC Nostr event signature mismatch');",
+				"\t\tif(eventObject.sig && !schnorrVerify(eventObject.id, eventObject.pubkey, eventObject.sig)){\n\t\t\tthrow new Error('OTC Nostr event signature mismatch');"
 			);
 		}
 	},
@@ -62,8 +64,8 @@ const mutants = [
 		mutate(appDir) {
 			replaceOnce(
 				path.join(appDir, 'js', 'otc-nostr.js'),
-				"if(!eventObject.sig || !schnorrVerify(eventObject.id, eventObject.pubkey, eventObject.sig)){\n\t\t\tthrow new Error('Order event signature mismatch');",
-				"if(eventObject.sig && !schnorrVerify(eventObject.id, eventObject.pubkey, eventObject.sig)){\n\t\t\tthrow new Error('Order event signature mismatch');"
+				"\t\tif(!eventObject.sig || !schnorrVerify(eventObject.id, eventObject.pubkey, eventObject.sig)){\n\t\t\tthrow new Error('Order event signature mismatch');",
+				"\t\tif(eventObject.sig && !schnorrVerify(eventObject.id, eventObject.pubkey, eventObject.sig)){\n\t\t\tthrow new Error('Order event signature mismatch');"
 			);
 		}
 	},
