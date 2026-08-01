@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2026 SpaceXpanse
- * Fork-specific OTC Nostr transport helpers for SpeXex.
+ * Fork-specific OTC Nostr transport helpers for the SpaceXpanse ROD wallet.
  */
 
 (function(){
@@ -9,34 +9,34 @@
 	var nostrModule = root.nostr = root.nostr || {};
 	/* Stored regular event kind. Do not use 30000-39999 here: those are parameterized replaceable
 	   and relays may retain only the latest event per pubkey/kind/d, hiding swap_terms from late peers. */
-	nostrModule.OTC_EVENT_KIND = 7340;
-	nostrModule.LEGACY_OTC_EVENT_KIND = 33440;
+	nostrModule.PROTOCOL_VERSION = 2;
+	nostrModule.OTC_EVENT_KIND = 7341;
 	var MESSAGE_TYPES = {
 		swap_accept: true,
 		swap_decline: true,
 		swap_terms: true,
 		swap_adaptor_point: true,
-		swap_alt_adaptor_signature: true,
-		swap_alt_normal_signature: true,
-		swap_rod_adaptor_signature: true,
-		swap_rod_normal_signature: true,
-		swap_rod_funded: true,
-		swap_alt_funded: true,
+		swap_payment_adaptor_signature: true,
+		swap_payment_normal_signature: true,
+		swap_asset_adaptor_signature: true,
+		swap_asset_normal_signature: true,
+		swap_asset_funded: true,
+		swap_payment_funded: true,
 		swap_ready: true,
-		swap_alt_claimed: true,
+		swap_payment_claimed: true,
 		swap_secret_recovered: true,
-		swap_rod_claimed: true,
+		swap_asset_claimed: true,
 		swap_complete: true,
 		/* Pre-funding protocol: planned (signed, unbroadcast) funding txids,
 		   pre-signed timelocked refund exchange, and the PREPARED gate. */
-		swap_rod_funding_planned: true,
-		swap_alt_funding_planned: true,
-		swap_rod_refund_signature: true,
-		swap_alt_refund_signature: true,
+		swap_asset_funding_planned: true,
+		swap_payment_funding_planned: true,
+		swap_asset_refund_signature: true,
+		swap_payment_refund_signature: true,
 		swap_prepared: true,
 		/* Refund outcome notifications */
-		swap_rod_refund_broadcast: true,
-		swap_alt_refund_broadcast: true,
+		swap_asset_refund_broadcast: true,
+		swap_payment_refund_broadcast: true,
 		swap_refunded: true
 	};
 
@@ -136,7 +136,7 @@
 		}
 		var pubkey = identity.pubkey;
 		var envelope = {
-			version: 1,
+			version: nostrModule.PROTOCOL_VERSION,
 			swapId: input.swapId,
 			type: input.type,
 			sequence: input.sequence,
@@ -170,11 +170,11 @@
 
 	   Because the record names one exact event id, and validation checks that
 	   id and the signature under the key the record names, a relay can withhold
-	   detail but cannot substitute, alter or invent it. Kind 31340 is in the
+	   detail but cannot substitute, alter or invent it. Kind 31341 is in the
 	   NIP-01 parameterised-replaceable range (30000-39999) so a re-publish
 	   supersedes cleanly under the same d-tag; superseding an ORDER, though,
 	   means writing a new name record, not publishing a new event. */
-	nostrModule.ORDER_EVENT_KIND = 31340;
+	nostrModule.ORDER_EVENT_KIND = 31341;
 
 	nostrModule.createOrderEvent = function(input){
 		var order = input.order || {};
@@ -197,7 +197,7 @@
 		   tombstone would imply this transport can retire an offer, which it
 		   cannot. */
 		var envelope = {
-			version: 1,
+			version: nostrModule.PROTOCOL_VERSION,
 			kind: 'otc-order',
 			order: body
 		};
@@ -235,7 +235,7 @@
 			throw new Error('Order event signature mismatch');
 		}
 		var envelope = JSON.parse(eventObject.content);
-		if(envelope.version !== 1 || envelope.kind !== 'otc-order' || !envelope.order){
+		if(envelope.version !== nostrModule.PROTOCOL_VERSION || envelope.kind !== 'otc-order' || !envelope.order){
 			throw new Error('Unsupported order payload');
 		}
 		if(envelope.order.nostrPubkey && envelope.order.nostrPubkey !== eventObject.pubkey){
@@ -248,7 +248,7 @@
 		if(!eventObject || !eventObject.content || !eventObject.id){
 			throw new Error('Incomplete OTC Nostr envelope');
 		}
-		if(eventObject.kind !== nostrModule.OTC_EVENT_KIND && eventObject.kind !== nostrModule.LEGACY_OTC_EVENT_KIND){
+		if(eventObject.kind !== nostrModule.OTC_EVENT_KIND){
 			throw new Error('Unsupported OTC Nostr event kind ' + eventObject.kind);
 		}
 		if(computeEventId(eventObject) !== eventObject.id){
@@ -262,7 +262,7 @@
 			throw new Error('OTC Nostr event signature mismatch');
 		}
 		var envelope = JSON.parse(eventObject.content);
-		if(envelope.version !== 1 || !MESSAGE_TYPES[envelope.type] || !envelope.swapId || typeof envelope.sequence !== 'number'){
+		if(envelope.version !== nostrModule.PROTOCOL_VERSION || !MESSAGE_TYPES[envelope.type] || !envelope.swapId || typeof envelope.sequence !== 'number'){
 			throw new Error('Unsupported OTC Nostr payload');
 		}
 		return envelope;

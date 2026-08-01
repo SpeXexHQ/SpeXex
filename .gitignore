@@ -14,6 +14,3 @@ temp/
 coverage/
 tests/harness/e2e-report-*.json
 electron-state/
-electron/app/wallet/
-electron/dist/
-electron/node_modules/

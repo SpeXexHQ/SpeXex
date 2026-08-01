@@ -78,6 +78,7 @@ function testAddressChangeInvalidatesOldCallback() {
 }
 
 function testDgbRoutingAndCsp() {
+	const registrySource = fs.readFileSync(path.join(root, 'js', 'chain-registry.js'), 'utf8');
 	const coinSource = fs.readFileSync(path.join(root, 'js', 'coin.js'), 'utf8');
 	const coinbinSource = fs.readFileSync(path.join(root, 'js', 'coinbin.js'), 'utf8');
 	const engineSource = fs.readFileSync(path.join(root, 'js', 'otc-engine.js'), 'utf8');
@@ -85,8 +86,11 @@ function testDgbRoutingAndCsp() {
 	const headers = fs.readFileSync(path.join(root, '_headers'), 'utf8');
 	const serviceWorker = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
 
-	assert(/'DGB'\s*:\s*\{[\s\S]*?'apiType'\s*:\s*'esplora'[\s\S]*?'apiBase'\s*:\s*'https:\/\/digiexplorer\.info\/api'/.test(coinSource),
+	const registry = require(path.join(root, 'js', 'chain-registry.js'));
+	assert.strictEqual(registry.getProfile('DGB').api.type, 'esplora',
 		'DGB must default to Digiexplorer through the Esplora driver');
+	assert.strictEqual(registry.getProfile('DGB').api.base, 'https://digiexplorer.info/api',
+		'DGB must use the reviewed default API base');
 
 	const browser = {
 		console,
@@ -95,6 +99,7 @@ function testDgbRoutingAndCsp() {
 	};
 	browser.window = browser;
 	vm.createContext(browser);
+	vm.runInContext(registrySource, browser, { filename: 'js/chain-registry.js' });
 	vm.runInContext(coinSource, browser, { filename: 'js/coin.js' });
 	vm.runInContext(explorerSource, browser, { filename: 'js/otc-explorer.js' });
 	browser.coinjs.setNetwork('DGB');
@@ -123,15 +128,22 @@ function testDgbRoutingAndCsp() {
 		'CSP must permit the default DGB backend');
 	assert(/'DGB'\s*:\s*\[[^\]]*https:\/\/api\.blockchair\.com\/digibyte/.test(coinbinSource),
 		'wallet API settings must migrate the old shipped DGB default');
-	assert(/savedDgb\.apiUrl\s*===\s*'https:\/\/api\.blockchair\.com\/digibyte'/.test(engineSource),
-		'OTC engine settings must migrate the old shipped DGB default');
-	assert(/STATIC_CACHE_VERSION\s*=\s*"[^"]*2\.9\.1-beta\.1/.test(serviceWorker),
+	assert(!/rodOtcEngineConfig|altChains|rodApiUrl/.test(engineSource),
+		'v2 OTC engine must not read or migrate the old configuration schema');
+	assert(/STATIC_CACHE_VERSION\s*=\s*"[^"]*2\.6\.0-alpha\.3/.test(serviceWorker),
 		'service-worker cache must carry the current release identity');
 }
 
-function runEngineWithSavedConfig(savedConfig) {
+function runEngineWithSavedConfig(savedConfig, legacyConfig) {
 	const engineSource = fs.readFileSync(path.join(root, 'js', 'otc-engine.js'), 'utf8');
-	const values = { rodOtcEngineConfig: JSON.stringify(savedConfig) };
+	const values = {};
+	if (savedConfig) values.spexSwapV2Config = JSON.stringify(savedConfig);
+	if (legacyConfig) values.rodOtcEngineConfig = JSON.stringify(legacyConfig);
+	const definitions = {
+		ROD: { apiUrl: 'https://api.spacexpanse.org:1234', apiType: 'rod', refundBlocks: { asset: 480, payment: 120 }, confirmations: 1 },
+		LTC: { apiUrl: 'https://litecoinspace.org/api', apiType: 'esplora', refundBlocks: { asset: 96, payment: 24 }, confirmations: 1 },
+		DOGE: { apiUrl: 'https://api.blockcypher.com/v1/doge/main', apiType: 'blockcypher', refundBlocks: { asset: 240, payment: 60 }, confirmations: 6 }
+	};
 	const browser = {
 		console,
 		window: null,
@@ -142,9 +154,11 @@ function runEngineWithSavedConfig(savedConfig) {
 		coinjs: {
 			networks: {
 				ROD: { apiBase: 'https://api.spacexpanse.org:1234' },
-				DGB: { apiBase: 'https://digiexplorer.info/api', apiType: 'esplora' }
+				DGB: { apiBase: 'https://digiexplorer.info/api', apiType: 'esplora' },
+				LTC: { apiBase: 'https://litecoinspace.org/api', apiType: 'esplora' },
+				DOGE: { apiBase: 'https://api.blockcypher.com/v1/doge/main', apiType: 'blockcypher' }
 			},
-			explorer: { drivers: { esplora: {}, blockchair: {} } }
+			explorer: { drivers: { rod: {}, esplora: {}, blockcypher: {}, blockchair: {} } }
 		}
 	};
 	browser.window = browser;
@@ -159,47 +173,41 @@ function runEngineWithSavedConfig(savedConfig) {
 		trim(value) { return String(value).trim(); }
 	};
 	browser.rodOtc = {
-		swap: { DEFAULT_ALT_CHAIN: 'LTC' },
+		swap: { DEFAULT_PAYMENT_CHAIN: 'LTC' },
 		storage: {},
-		chains: {},
+		chains: {
+			codes() { return Object.keys(definitions); },
+			getDefinition(code) { return definitions[code]; },
+			getRefundBlocks(code, role) { return definitions[code].refundBlocks[role]; }
+		},
 		nostr: {}
 	};
 	vm.createContext(browser);
 	vm.runInContext(engineSource, browser, { filename: 'js/otc-engine.js' });
-	return { browser, saved: JSON.parse(values.rodOtcEngineConfig) };
+	return { browser, values };
 }
 
-function testDgbDefaultMigration() {
-	const oldDefault = runEngineWithSavedConfig({
-		altChains: {
-			DGB: {
-				apiUrl: 'https://api.blockchair.com/digibyte',
-				apiType: 'blockchair'
-			}
-		}
+function testV1ConfigIsolation() {
+	const result = runEngineWithSavedConfig(null, {
+		rodApiUrl: 'https://legacy.invalid/rod',
+		altApiUrl: 'https://legacy.invalid/ltc',
+		altChains: { DOGE: { apiUrl: 'https://legacy.invalid/doge' } }
 	});
-	assert.strictEqual(oldDefault.saved.altChains.DGB, undefined,
-		'the old shipped Blockchair default must be removed from persisted engine config');
-	assert.strictEqual(oldDefault.browser.coinjs.networks.DGB.apiType, 'esplora');
-	assert.strictEqual(oldDefault.browser.coinjs.networks.DGB.apiBase, 'https://digiexplorer.info/api');
-
-	const custom = runEngineWithSavedConfig({
-		altChains: {
-			DGB: {
-				apiUrl: 'https://dgb.example.invalid/api',
-				apiType: 'esplora'
-			}
-		}
-	});
-	assert.strictEqual(custom.saved.altChains.DGB.apiUrl, 'https://dgb.example.invalid/api',
-		'a custom DGB endpoint must not be migrated');
-	assert.strictEqual(custom.browser.coinjs.networks.DGB.apiBase, 'https://dgb.example.invalid/api');
+	const config = result.browser.rodOtc.engine.loadConfig();
+	assert.strictEqual(config.chains.ROD.apiUrl, 'https://api.spacexpanse.org:1234');
+	assert.strictEqual(config.chains.LTC.apiUrl, 'https://litecoinspace.org/api');
+	assert.strictEqual(config.chains.DOGE.apiUrl, 'https://api.blockcypher.com/v1/doge/main');
+	assert.strictEqual(result.values.spexSwapV2Config, undefined,
+		'reading defaults must not convert or overwrite a v1 configuration');
+	const unknown = runEngineWithSavedConfig({ chains: { DGB: { apiUrl: 'https://unsupported.invalid' } } });
+	assert.strictEqual(unknown.browser.rodOtc.engine.loadConfig().chains.DGB, undefined,
+		'wallet-only chains must not enter the v2 settlement registry through saved settings');
 }
 
 testDgbToRodRace();
 testLateRequestCannotHideNewLoader();
 testAddressChangeInvalidatesOldCallback();
 testDgbRoutingAndCsp();
-testDgbDefaultMigration();
+testV1ConfigIsolation();
 
-console.log('wallet balance and DGB default regressions: 5/5 passed');
+console.log('wallet balance, explorer, and v1-isolation regressions: 5/5 passed');

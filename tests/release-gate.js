@@ -8,17 +8,9 @@ const path = require('path');
 const vm = require('vm');
 
 const root = path.resolve(process.env.APP_DIR || path.join(__dirname, '..'));
+const chainRegistry = require(path.join(root, 'js', 'chain-registry.js'));
 const results = [];
 const releaseInventoryDirectories = new Set(['css', 'fonts', 'images', 'js', 'tools']);
-
-function normalizeHashContent(relativePath) {
-	const data = fs.readFileSync(path.join(root, relativePath));
-	if (/\.(?:bat|css|html|js|json|md|svg|txt|webmanifest|ya?ml)$/i.test(relativePath) ||
-		!relativePath.includes('.')) {
-		return Buffer.from(data.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
-	}
-	return data;
-}
 
 function check(name, fn) {
 	try {
@@ -53,7 +45,7 @@ function inReleaseInventory(relativePath) {
 function walk(directory, predicate) {
 	const output = [];
 	for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-		if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist') continue;
+		if (entry.name === 'node_modules' || entry.name === '.git') continue;
 		const absolute = path.join(directory, entry.name);
 		if (entry.isDirectory()) output.push(...walk(absolute, predicate));
 		else if (!predicate || predicate(absolute)) output.push(absolute);
@@ -149,7 +141,7 @@ if (process.env.SKIP_RELEASE_INTEGRITY !== '1') {
 
 		for (const relative of files) {
 			const digest = crypto.createHash('sha256')
-				.update(normalizeHashContent(relative))
+				.update(fs.readFileSync(path.join(root, relative)))
 				.digest('hex');
 			assert.strictEqual(entries.get(relative), digest,
 				'SHA-256 mismatch for ' + relative);
@@ -213,6 +205,7 @@ check('runtime script order preserves global dependencies', () => {
 		'js/crypto-min.js',
 		'js/jsbn.js',
 		'js/ellipticcurve.js',
+		'js/chain-registry.js',
 		'js/coin.js',
 		'js/otc-explorer.js',
 		'js/ecdsa-adaptor.js',
@@ -269,11 +262,9 @@ check('default API origins are permitted by deployed CSP', () => {
 	const connectMatch = cspMatch[1].match(/connect-src\s+([^;]+)/i);
 	assert(connectMatch, 'connect-src directive is missing');
 	const allowlist = connectMatch[1].split(/\s+/);
-	const coinSource = read('js/coin.js');
-	const origins = new Set();
-	for (const match of coinSource.matchAll(/['"]apiBase['"]\s*:\s*['"](https?:\/\/[^'"]+)['"]/g)) {
-		origins.add(new URL(match[1]).origin);
-	}
+	const origins = new Set(chainRegistry.codes().map((code) =>
+		new URL(chainRegistry.getProfile(code).api.base).origin
+	));
 	const blocked = [...origins].filter((origin) => !allowlist.includes(origin));
 	assert.deepStrictEqual(blocked, [], 'CSP blocks default API origin(s): ' + blocked.join(', '));
 	return origins.size + ' default API origins';
@@ -283,71 +274,93 @@ check('wallet, explorer, and OTC support registries cannot drift', () => {
 	const coinSource = read('js/coin.js');
 	const explorerSource = read('js/otc-explorer.js');
 	const chainSource = read('js/otc-chains.js');
-	const swapSource = read('js/otc-swap.js');
 	const engineSource = read('js/otc-engine.js');
 	const uiSource = read('js/otc-app-ui.js');
+	const walletUiSource = read('js/coinbin.js');
 	const e2eSource = read('tests/harness/e2e-swap-test.js');
+	const mockSource = read('tests/harness/mock-infra.js');
 	const runnerSource = read('tests/harness/run-all.sh');
 
-	const networkTypes = [...coinSource.matchAll(/['"]apiType['"]\s*:\s*['"]([^'"]+)['"]/g)]
-		.map((match) => match[1]).filter((type) => type !== 'rod');
+	const networkTypes = chainRegistry.codes().map((code) => chainRegistry.getProfile(code).api.type)
+		.filter((type) => type !== 'rod');
 	const drivers = topLevelKeys(objectLiteralBody(explorerSource, 'explorer.drivers ='))
 		.map((key) => key.toLowerCase());
 	for (const type of networkTypes) {
 		assert(drivers.includes(type), 'wallet network references unregistered explorer driver ' + type);
 	}
 
-	const definitions = topLevelKeys(objectLiteralBody(chainSource, 'chainsModule.definitions ='));
-	const fees = topLevelKeys(objectLiteralBody(swapSource, 'swapModule.ALT_CHAIN_FEES ='));
-	const defaults = topLevelKeys(objectLiteralBody(engineSource, 'altChains:'));
-	const otcCounters = definitions.filter((code) => code !== 'ROD').sort();
-	assert.deepStrictEqual(fees, otcCounters, 'OTC fee registry differs from chain definitions');
-	assert.deepStrictEqual(defaults, otcCounters, 'engine defaults differ from OTC chain definitions');
-
-	const e2eMatch = e2eSource.match(/SUPPORTED_ALT_CHAINS\s*=\s*\[([^\]]+)\]/);
-	assert(e2eMatch, 'e2e supported-chain registry is missing');
-	const e2eChains = [...e2eMatch[1].matchAll(/['"]([A-Z0-9]+)['"]/g)].map((match) => match[1]).sort();
-	const runnerMatch = runnerSource.match(/SUPPORTED_SWAP_CHAINS=\(([^)]+)\)/);
-	assert(runnerMatch, 'matrix runner supported-chain registry is missing');
-	const runnerChains = runnerMatch[1].trim().split(/\s+/).filter(Boolean).sort();
-	assert.deepStrictEqual(e2eChains, otcCounters, 'e2e registry differs from OTC definitions');
-	assert.deepStrictEqual(runnerChains, otcCounters, 'run-all matrix differs from OTC definitions');
-	const uiRegistry = uiSource.match(/function altChainCodes\(\)\s*\{([\s\S]*?)\n\t\}/);
+	const definitions = chainRegistry.swapCodes();
+	assert(coinSource.includes('spexChainRegistry.walletNetworks()'),
+		'wallet runtime must compile networks from the authoritative registry');
+	assert(chainSource.includes('spexChainRegistry.swapDefinitions()') && chainSource.includes('spexChainRegistry.swapPolicies()'),
+		'swap runtime must compile definitions and policy from the authoritative registry');
+	assert(engineSource.includes('CHAINS.codes().forEach'), 'engine defaults must derive from the unified chain registry');
+	assert(e2eSource.includes('CHAIN_REGISTRY.swapCodes()') && e2eSource.includes('process.env.ASSET_CHAIN') &&
+		e2eSource.includes('process.env.PAYMENT_CHAIN') && !/SUPPORTED_ALT_CHAINS\s*=\s*\[/.test(e2eSource),
+		'e2e pair roles must be discovered from the authoritative registry');
+	assert(runnerSource.includes("require('../../js/chain-registry.js').swapCodes()") &&
+		runnerSource.includes('if(asset!==payment)') && runnerSource.includes('SUPPORTED_SWAP_PAIRS'),
+		'full matrix runner must discover every ordered pair of certified chains');
+	assert(mockSource.includes('CHAIN_REGISTRY.codes()') && mockSource.includes('CHAIN_REGISTRY.swapCodes()'),
+		'mock chain versions and policy must derive from the authoritative registry');
+	const uiRegistry = uiSource.match(/function chainCodes\(\)\s*\{([\s\S]*?)\n\t\}/);
 	assert(uiRegistry, 'OTC UI chain registry function is missing');
-	assert(uiRegistry[1].includes('SWAP.ALT_CHAIN_FEES'),
-		'OTC UI is not constrained by the swap support registry');
+	assert(uiRegistry[1].includes('CHAINS.codes()'),
+		'OTC UI must derive both selectors from the unified chain registry');
 	assert(!uiRegistry[1].includes('for (var code in coinjs.networks)'),
 		'OTC UI exposes every wallet network as a swap network');
+	assert(walletUiSource.includes('function renderWalletCoinMenu()') && walletUiSource.includes('for(var code in coinjs.networks)'),
+		'wallet Coins menu must be generated from the authoritative registry');
+	assert(walletUiSource.includes('Object.keys(coinjs.networks || {}).sort()'),
+		'wallet Settings network dropdown must be generated from the authoritative registry');
+	assert(!walletUiSource.includes('Currently supported chains for OTC trading: ROD, LTC, DOGE'),
+		'wallet-only notice contains a copied swap-support list');
+	assert(!/if\s*\(coinjs\.pub\s*==/.test(walletUiSource),
+		'wallet Settings still dispatches networks by colliding version bytes');
 	return 'wallet drivers=' + [...new Set(networkTypes)].sort().join(',') +
-		'; OTC=' + otcCounters.join(',');
+		'; swap registry=' + definitions.join(',');
 });
 
-check('settlement harness policy and fee constants match production defaults', () => {
-	const engineSource = read('js/otc-engine.js');
-	const swapSource = read('js/otc-swap.js');
+check('profile-only onboarding compiles every consumer and rejects incomplete certification', () => {
+	const profiles = chainRegistry.profiles();
+	const fixture = JSON.parse(JSON.stringify(profiles.LTC));
+	fixture.code = 'TST';
+	fixture.name = 'Registry Test Chain';
+	fixture.shortName = 'Test Chain';
+	fixture.unit = 'TST';
+	fixture.uriPrefix = 'testchain';
+	profiles.TST = fixture;
+	const extended = chainRegistry.compile(profiles);
+	assert(extended.codes().includes('TST'), 'fixture did not enter wallet registry');
+	assert(extended.swapCodes().includes('TST'), 'fixture did not enter swap registry');
+	assert(extended.walletNetworks().TST.apiBase === fixture.api.base, 'fixture did not enter API settings');
+	assert(extended.swapDefinitions().TST.fees.claim === fixture.swap.fees.claim, 'fixture did not enter settlement defaults');
+	assert(extended.swapPolicies().TST.blockSeconds === fixture.swap.blockSeconds, 'fixture did not enter timing policy');
+
+	const broken = chainRegistry.profiles();
+	broken.LTC.swap.policy = null;
+	assert.throws(() => chainRegistry.compile(broken), /relay policy is missing/,
+		'incomplete certified profile was accepted');
+	const collision = chainRegistry.profiles();
+	collision.LTC.address.multisig = collision.LTC.address.pub;
+	assert.throws(() => chainRegistry.compile(collision), /P2PKH and P2SH version bytes must differ/,
+		'same-chain address-prefix collision was accepted');
+	const unsafePair = chainRegistry.profiles();
+	unsafePair.LTC.swap.refundBlocks.asset = 25;
+	assert.throws(() => chainRegistry.compile(unsafePair), /LTC\/(?:DOGE|ROD) default refund windows are unsafe/,
+		'profile that exposes unsafe cross-chain defaults was accepted');
+	return 'one TST profile reached wallet, swap, API, timing, fee, and policy consumers';
+});
+
+check('settlement harness consumes production registry without copied chain constants', () => {
 	const e2eSource = read('tests/harness/e2e-swap-test.js');
-	const defaults = objectLiteral(engineSource, 'var defaults =');
-	const defaultFees = objectLiteral(swapSource, 'swapModule.DEFAULT_FEES =');
-	const altFees = objectLiteral(swapSource, 'swapModule.ALT_CHAIN_FEES =');
-	const profiles = objectLiteral(e2eSource, 'const ALT_PROFILES =');
-
-	assert.strictEqual(numericConstant(e2eSource, 'REFUND_ROD_BLOCKS'), defaults.refundRodBlocks,
-		'e2e ROD refund delay differs from the shipped default');
-	assert.strictEqual(numericConstant(e2eSource, 'ROD_CLAIM_FEE'), decimalToBaseUnits(defaultFees.rodClaimFee),
-		'e2e ROD claim fee differs from canonical terms');
-	assert.strictEqual(numericConstant(e2eSource, 'ROD_REFUND_FEE'), decimalToBaseUnits(defaultFees.rodRefundFee),
-		'e2e ROD refund fee differs from canonical terms');
-
-	for (const code of Object.keys(defaults.altChains).sort()) {
-		assert(profiles[code], 'e2e profile missing ' + code);
-		assert.strictEqual(profiles[code].refundBlocks, defaults.altChains[code].refundBlocks,
-			'e2e ' + code + ' refund delay differs from the shipped default');
-		assert.strictEqual(profiles[code].confirmations, defaults.altChains[code].confirmations,
-			'e2e ' + code + ' confirmation gate differs from the shipped default');
-		assert.strictEqual(profiles[code].claimFee, decimalToBaseUnits(altFees[code].claimFee),
-			'e2e ' + code + ' claim fee differs from canonical terms');
-	}
-	return Object.keys(profiles).sort().join(',') + '; ROD refund=' + defaults.refundRodBlocks + ' blocks';
+	assert(e2eSource.includes("const CONTROL_PROFILE = harnessProfile('ROD')"), 'ROD control-plane harness profile is not registry-derived');
+	assert(e2eSource.includes('const ROD_PROFILE = harnessProfile(ASSET)'), 'asset harness profile is not registry-derived');
+	assert(e2eSource.includes('const ALT_PROFILE = harnessProfile(ALT)'), 'counter-chain harness profile is not registry-derived');
+	assert(!/const\s+ALT_PROFILES\s*=/.test(e2eSource), 'copied e2e chain profiles remain');
+	assert(!/const\s+(?:REFUND_ROD_BLOCKS|ROD_CLAIM_FEE|ASSET_REFUND_FEE)\s*=\s*\d+/.test(e2eSource),
+		'copied settlement constants remain in e2e harness');
+	return chainRegistry.swapCodes().join(',') + ' profiles and all ordered pairs derived at runtime';
 });
 
 check('UI, manifest, and service-worker release identities agree', () => {

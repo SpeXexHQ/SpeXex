@@ -12,16 +12,10 @@ const testRoot = __dirname;
 
 function copyProject() {
 	const target = fs.mkdtempSync(path.join(os.tmpdir(), 'rod-wallet-mutant-'));
-	const skippedPaths = [
-		path.join('tests', 'harness', 'node_modules'),
-		path.join('electron', 'dist')
-	];
 	fs.cpSync(root, target, {
 		recursive: true,
 		filter(source) {
-			return !skippedPaths.some(function(skippedPath) {
-				return source.includes(skippedPath);
-			});
+			return !source.includes(path.join('tests', 'harness', 'node_modules'));
 		}
 	});
 	return target;
@@ -29,10 +23,8 @@ function copyProject() {
 
 function replaceOnce(file, before, after) {
 	const source = fs.readFileSync(file, 'utf8');
-	const normalizedSource = source.replace(/\r\n/g, '\n');
-	const normalizedBefore = before.replace(/\r\n/g, '\n');
-	assert(normalizedSource.includes(normalizedBefore), 'mutation target not found in ' + file + ': ' + before);
-	fs.writeFileSync(file, normalizedSource.replace(normalizedBefore, after.replace(/\r\n/g, '\n')));
+	assert(source.includes(before), 'mutation target not found in ' + file + ': ' + before);
+	fs.writeFileSync(file, source.replace(before, after));
 }
 
 function runTest(script, appDir) {
@@ -53,8 +45,8 @@ const mutants = [
 		mutate(appDir) {
 			replaceOnce(
 				path.join(appDir, 'js', 'otc-nostr.js'),
-				"\t\tif(!eventObject.sig || !schnorrVerify(eventObject.id, eventObject.pubkey, eventObject.sig)){\n\t\t\tthrow new Error('OTC Nostr event signature mismatch');",
-				"\t\tif(eventObject.sig && !schnorrVerify(eventObject.id, eventObject.pubkey, eventObject.sig)){\n\t\t\tthrow new Error('OTC Nostr event signature mismatch');"
+				"if(!eventObject.sig || !schnorrVerify(eventObject.id, eventObject.pubkey, eventObject.sig)){\n\t\t\tthrow new Error('OTC Nostr event signature mismatch');",
+				"if(eventObject.sig && !schnorrVerify(eventObject.id, eventObject.pubkey, eventObject.sig)){\n\t\t\tthrow new Error('OTC Nostr event signature mismatch');"
 			);
 		}
 	},
@@ -64,8 +56,8 @@ const mutants = [
 		mutate(appDir) {
 			replaceOnce(
 				path.join(appDir, 'js', 'otc-nostr.js'),
-				"\t\tif(!eventObject.sig || !schnorrVerify(eventObject.id, eventObject.pubkey, eventObject.sig)){\n\t\t\tthrow new Error('Order event signature mismatch');",
-				"\t\tif(eventObject.sig && !schnorrVerify(eventObject.id, eventObject.pubkey, eventObject.sig)){\n\t\t\tthrow new Error('Order event signature mismatch');"
+				"if(!eventObject.sig || !schnorrVerify(eventObject.id, eventObject.pubkey, eventObject.sig)){\n\t\t\tthrow new Error('Order event signature mismatch');",
+				"if(eventObject.sig && !schnorrVerify(eventObject.id, eventObject.pubkey, eventObject.sig)){\n\t\t\tthrow new Error('Order event signature mismatch');"
 			);
 		}
 	},
@@ -86,7 +78,7 @@ const mutants = [
 		mutate(appDir) {
 			replaceOnce(
 				path.join(appDir, 'js', 'otc-swap.js'),
-				'if(!(rodRemainingSeconds > altRemainingSeconds + safetyMarginSeconds)){',
+				'if(!(assetRemainingSeconds > paymentRemainingSeconds + safetyMarginSeconds)){',
 				'if(false){'
 			);
 		}

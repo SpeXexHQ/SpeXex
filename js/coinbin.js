@@ -72,6 +72,41 @@ return typeof value === "string" && value !== "1";
 		return (coinjs.networks && coinjs.networks[c]) ? c : 'ROD';
 	}
 
+	/* The Coins menu is registry-driven. Adding a profile must not require a
+	   second, easily forgotten edit to index.html. Certification affects only
+	   grouping/copy here; every entry remains an ordinary wallet network. */
+	function renderWalletCoinMenu(){
+		var $menu = $('#walletCoinMenu');
+		if(!$menu.length) return;
+		$menu.empty();
+		var groups = [
+			{ status: 'certified', label: 'Swap certified' },
+			{ status: 'wallet-only', label: 'Wallet only' }
+		];
+		for(var groupIndex = 0; groupIndex < groups.length; groupIndex++){
+			var group = groups[groupIndex];
+			var groupCodes = [];
+			for(var code in coinjs.networks){
+				if(coinjs.networks.hasOwnProperty(code) && coinjs.networks[code].swapStatus === group.status){
+					groupCodes.push(code);
+				}
+			}
+			groupCodes.sort();
+			if(!groupCodes.length) continue;
+			if($menu.children().length) $menu.append($('<li>').addClass('divider'));
+			$menu.append($('<li>').addClass('dropdown-header').text(group.label));
+			for(var codeIndex = 0; codeIndex < groupCodes.length; codeIndex++){
+				var chainCode = groupCodes[codeIndex];
+				var network = coinjs.networks[chainCode];
+				var $check = $('<span>').addClass('glyphicon glyphicon-ok coin-check hidden').attr('data-coin', chainCode);
+				var $link = $('<a>').attr('href', 'javascript:;').addClass('walletCoinSelect').attr('data-coin', chainCode);
+				$link.append($check).append(document.createTextNode(' ' + chainCode + ' '));
+				$link.append($('<small>').addClass('text-muted').text(network.shortName || network.name || chainCode));
+				$menu.append($('<li>').append($link));
+			}
+		}
+	}
+
 	function getActiveCoin(){
 		try {
 			return normalizeCoinCode(window.localStorage.getItem(ACTIVE_COIN_KEY));
@@ -140,7 +175,7 @@ return typeof value === "string" && value !== "1";
 		$('#walletSendCoinLabel').text(unit);
 		$('.js-coin-unit').text(unit);
 		$('.js-coin-name').text(net.name || unit);
-		document.title = 'SpeXex';
+		document.title = net.name + ' Wallet by rod-web-wallet';
 		$('.coin-check').addClass('hidden');
 		$('.coin-check[data-coin="'+net.code+'"]').removeClass('hidden');
 		/* Spend form copy */
@@ -541,7 +576,7 @@ return typeof value === "string" && value !== "1";
 			var wifPubkey = coinjs.wif2pubkey(wif);
 			var decodedAddress = coinjs.addressDecode(wifAddress.address);
 			if(!decodedAddress || decodedAddress.version != coinjs.pub){
-				showWalletLoginError("#openWifStatus", "Unable to decode a valid ROD address from this WIF private key.");
+				showWalletLoginError("#openWifStatus", "Unable to decode a valid " + ((coinjs.getNetwork && coinjs.getNetwork().unit) || 'coin') + " address from this WIF private key.");
 				return;
 			}
 
@@ -551,7 +586,7 @@ return typeof value === "string" && value !== "1";
 				'address': wifAddress.address
 			}, '', getWalletAddressType());
 		} catch(e) {
-			showWalletLoginError("#openWifStatus", "Enter a valid ROD WIF private key for the selected network.");
+			showWalletLoginError("#openWifStatus", "Enter a valid WIF private key for the selected network.");
 		}
 	});
 
@@ -607,6 +642,7 @@ return typeof value === "string" && value !== "1";
 	syncWalletSegwitState();
 
 	/* Apply saved coin network site-wide, then restore wallet if any. */
+	renderWalletCoinMenu();
 	applyActiveCoin(getActiveCoin(), {skipWallet: true});
 	restoreWalletSession();
 
@@ -631,11 +667,11 @@ return typeof value === "string" && value !== "1";
 
 	$("#walletShowBuy").click(function(){
 		/* For chains that have OTC swap support (listed in CHAINS.definitions),
-		   navigate to the OTC Swap tab. For wallet-only chains (BTC, BCH, DGB),
-		   show a message that OTC support is pending. */
+		   navigate to the OTC Swap tab. For wallet-only chains, show a message
+		   derived from the same registry rather than a copied support list. */
 		var activeCoin = getActiveCoin();
 		var otcSupported = window.rodOtc && window.rodOtc.chains && window.rodOtc.chains.definitions;
-		if(activeCoin === 'ROD' || (otcSupported && otcSupported[activeCoin])){
+		if(otcSupported && otcSupported[activeCoin]){
 			/* Navigate to OTC Swap tab */
 			$('a[href="#otc"]').tab('show');
 		} else {
@@ -643,9 +679,12 @@ return typeof value === "string" && value !== "1";
 			$("#walletActionPlaceholder").addClass("hidden");
 			/* Show pending message in the action panel */
 			if(!$('#walletBuyPending').length){
-				$('#walletActionPanel').append('<div id="walletBuyPending" class="walletOptions hidden"><h3><span class="glyphicon glyphicon-info-sign"></span> OTC swap support pending</h3><p class="text-muted">OTC atomic swap support for <b class="js-coin-unit">'+activeCoin+'</b> is not yet available. Currently supported chains for OTC trading: ROD, LTC, DOGE.</p><p class="text-muted">Wallet features (address generation, balance check, and key management) work normally.</p></div>');
+				$('#walletActionPanel').append('<div id="walletBuyPending" class="walletOptions hidden"><h3><span class="glyphicon glyphicon-info-sign"></span> OTC swap support pending</h3><p class="text-muted">OTC atomic swap support for <b class="js-coin-unit">'+activeCoin+'</b> is not yet available. Currently swap-certified chains: <span class="js-swap-certified"></span>.</p><p class="text-muted">Wallet features (address generation, balance check, and key management) work normally.</p></div>');
 			}
 			$('#walletBuyPending .js-coin-unit').text(activeCoin);
+			var swapCodes = (window.rodOtc && window.rodOtc.chains && window.rodOtc.chains.codes)
+				? window.rodOtc.chains.codes() : [];
+			$('#walletBuyPending .js-swap-certified').text(swapCodes.length ? swapCodes.join(', ') : 'none');
 			$('#walletBuyPending').removeClass('hidden');
 			scrollToWalletActionPanel();
 		}
@@ -991,7 +1030,8 @@ return typeof value === "string" && value !== "1";
 					}
 
 					if(feeFloorResult.updated){
-						$("#walletSendConfirmStatus").removeClass("hidden alert-danger alert-success").addClass('alert-info').html('Network fee adjusted to the relay minimum of '+feeFloorResult.minimumFeeRod.toFixed(8)+' ROD for an estimated '+feeFloorResult.estimatedBytes+' byte transaction using '+inputCount+' input(s).');
+						var feeUnit = (coinjs.getNetwork && coinjs.getNetwork().unit) || 'coin';
+						$("#walletSendConfirmStatus").removeClass("hidden alert-danger alert-success").addClass('alert-info').html('Network fee adjusted to the relay minimum of '+feeFloorResult.minimumFeeRod.toFixed(8)+' '+feeUnit+' for an estimated '+feeFloorResult.estimatedBytes+' byte transaction using '+inputCount+' input(s).');
 					} else {
 						$("#walletSendConfirmStatus").addClass("hidden").removeClass('alert-success alert-danger alert-info').html("");
 					}
@@ -1131,7 +1171,8 @@ return typeof value === "string" && value !== "1";
 		}
 
 		var paperwallet = window.open();
-		paperwallet.document.write('<h2>ROD Paper Wallet</h2><hr><div style="margin-top: 5px; margin-bottom: 5px"><div><h3 style="margin-top: 0">Address (Share)</h3></div><div style="text-align: center;"><div id="qraddress"></div><p>'+$("#newBitcoinAddress").val()+'</p></div></div><hr><div style="margin-top: 5px; margin-bottom: 5px"><div><h3 style="margin-top: 0">Public Key</h3></div><div style="text-align: center;"><div id="qrpubkey"></div><p>'+$("#newPubKey").val()+'</p></div></div><hr><div style="margin-top: 5px; margin-bottom: 5px"><div><h3 style="margin-top: 0">Private Key (KEEP SECRET!)</h3></div><div style="text-align: center;"><div id="qrprivkey"></div><p>'+$("#newPrivKey").val()+'</p></div></div>');
+		var paperUnit = (coinjs.getNetwork && coinjs.getNetwork().unit) || 'Coin';
+		paperwallet.document.write('<h2>'+paperUnit+' Paper Wallet</h2><hr><div style="margin-top: 5px; margin-bottom: 5px"><div><h3 style="margin-top: 0">Address (Share)</h3></div><div style="text-align: center;"><div id="qraddress"></div><p>'+$("#newBitcoinAddress").val()+'</p></div></div><hr><div style="margin-top: 5px; margin-bottom: 5px"><div><h3 style="margin-top: 0">Public Key</h3></div><div style="text-align: center;"><div id="qrpubkey"></div><p>'+$("#newPubKey").val()+'</p></div></div><hr><div style="margin-top: 5px; margin-bottom: 5px"><div><h3 style="margin-top: 0">Private Key (KEEP SECRET!)</h3></div><div style="text-align: center;"><div id="qrprivkey"></div><p>'+$("#newPrivKey").val()+'</p></div></div>');
 		paperwallet.document.close();
 		paperwallet.focus();
 		new QRCode(paperwallet.document.getElementById("qraddress"), {text: $("#newBitcoinAddress").val(), width: 125, height: 125});
@@ -1203,7 +1244,8 @@ return typeof value === "string" && value !== "1";
 		}
 
 		var paperwallet = window.open();
-		paperwallet.document.write('<h2>ROD SegWit Paper Wallet</h2><hr><div style="margin-top: 5px; margin-bottom: 5px"><div><h3 style="margin-top: 0">Address (Share)</h3></div><div style="text-align: center;"><div id="qraddress"></div><p>'+$("#newSegWitAddress").val()+'</p></div></div><hr><div style="margin-top: 5px; margin-bottom: 5px"><div><h3 style="margin-top: 0">Public Key</h3></div><div style="text-align: center;"><div id="qrpubkey"></div><p>'+$("#newSegWitPubKey").val()+'</p></div></div><hr><div style="margin-top: 5px; margin-bottom: 5px"><div><h3 style="margin-top: 0">Redeem Script</h3></div><div style="text-align: center;"><div id="qrredeem"></div><p>'+$("#newSegWitRedeemScript").val()+'</p></div></div><hr><div style="margin-top: 5px; margin-bottom: 5px"><div><h3 style="margin-top: 0">Private Key (KEEP SECRET!)</h3></div><div style="text-align: center;"><div id="qrprivkey"></div><p>'+$("#newSegWitPrivKey").val()+'</p></div></div>');
+		var segwitPaperUnit = (coinjs.getNetwork && coinjs.getNetwork().unit) || 'Coin';
+		paperwallet.document.write('<h2>'+segwitPaperUnit+' SegWit Paper Wallet</h2><hr><div style="margin-top: 5px; margin-bottom: 5px"><div><h3 style="margin-top: 0">Address (Share)</h3></div><div style="text-align: center;"><div id="qraddress"></div><p>'+$("#newSegWitAddress").val()+'</p></div></div><hr><div style="margin-top: 5px; margin-bottom: 5px"><div><h3 style="margin-top: 0">Public Key</h3></div><div style="text-align: center;"><div id="qrpubkey"></div><p>'+$("#newSegWitPubKey").val()+'</p></div></div><hr><div style="margin-top: 5px; margin-bottom: 5px"><div><h3 style="margin-top: 0">Redeem Script</h3></div><div style="text-align: center;"><div id="qrredeem"></div><p>'+$("#newSegWitRedeemScript").val()+'</p></div></div><hr><div style="margin-top: 5px; margin-bottom: 5px"><div><h3 style="margin-top: 0">Private Key (KEEP SECRET!)</h3></div><div style="text-align: center;"><div id="qrprivkey"></div><p>'+$("#newSegWitPrivKey").val()+'</p></div></div>');
 		paperwallet.document.close();
 		paperwallet.focus();
 		new QRCode(paperwallet.document.getElementById("qraddress"), {text: $("#newSegWitAddress").val(), width: 110, height: 110});
@@ -2431,53 +2473,35 @@ function rawSubmitDefault(btn){
 
 	/* settings page code */
 
-	// Network definitions
-	var networks = [
-		{
-			name: 'SpaceXpanse ROD Mainnet',
-			value: 'rod-mainnet',
-			rel: '0x3c;0x4e;0x4b;0x488e4ad;0x4881eb2;true;true;rod'
-		},
-		{
-			name: 'Litecoin Mainnet',
-			value: 'ltc-mainnet',
-			rel: '0x30;0xb0;0x32;0x19da462;0x19d9cfe;true;true;ltc'
-		},
-		{
-			name: 'Bitcoin Mainnet',
-			value: 'btc-mainnet',
-			rel: '0x00;0x80;0x05;0x488b21e;0x488ade4;true;true;bc'
-		},
-		{
-			name: 'Bitcoin Cash Mainnet',
-			value: 'bch-mainnet',
-			rel: '0x00;0x80;0x05;0x488b21e;0x488ade4;true;true;'
-		},
-		{
-			name: 'DigiByte Mainnet',
-			value: 'dgb-mainnet',
-			rel: '0x1e;0x80;0x3f;0x488b21e;0x488ade4;true;true;dgb'
-		},
-		{
-			name: 'Dogecoin Mainnet',
-			value: 'doge-mainnet',
-			rel: '0x1e;0x9e;0x16;0x2facafd;0x2fac398;true;true;'
-		},
-		{
-			name: 'SpaceXpanse ROD Testnet',
-			value: 'rod-testnet',
-			rel: '0x73;0xc6;0x89;0x43587cf;0x4358394;true;true;trod'
-		}
-	];
+	/* Mainnet Settings entries are compiled from coinjs.networks, which itself
+	   is compiled from chain-registry.js. ROD testnet remains an explicit
+	   developer-only preset because it is not a mainnet chain profile. */
+	var networks = [];
+	var dropdownCodeMap = {};
+	var registryNetworkCodes = Object.keys(coinjs.networks || {}).sort();
+	for(var registryIndex = 0; registryIndex < registryNetworkCodes.length; registryIndex++){
+		var registryCode = registryNetworkCodes[registryIndex];
+		var registryNetwork = coinjs.networks[registryCode];
+		var registryValue = registryCode.toLowerCase() + '-mainnet';
+		networks.push({
+			name: (registryNetwork.name || registryCode) + ' Mainnet',
+			value: registryValue,
+			rel: '0x' + registryNetwork.pub.toString(16) + ';0x' + registryNetwork.priv.toString(16) +
+				';0x' + registryNetwork.multisig.toString(16) + ';0x' + registryNetwork.hdkey.pub.toString(16) +
+				';0x' + registryNetwork.hdkey.prv.toString(16) + ';true;true;' + (registryNetwork.bech32.hrp || '')
+		});
+		dropdownCodeMap[registryValue] = registryCode;
+	}
+	networks.push({
+		name: 'SpaceXpanse ROD Testnet',
+		value: 'rod-testnet',
+		rel: '0x73;0xc6;0x89;0x43587cf;0x4358394;true;true;trod'
+	});
 
 	/* Map network dropdown value prefixes to coinjs.activeNetwork codes so
 	   the dropdown can be matched by code, not just by pub/multisig bytes
 	   (BTC and BCH share the same pub 0x00 and multisig 0x05). */
-	var dropdownCodeMap = {
-		'rod-mainnet': 'ROD', 'ltc-mainnet': 'LTC', 'btc-mainnet': 'BTC',
-		'bch-mainnet': 'BCH', 'dgb-mainnet': 'DGB', 'doge-mainnet': 'DOGE',
-		'rod-testnet': 'ROD'
-	};
+	dropdownCodeMap['rod-testnet'] = 'ROD';
 
 	// Function to populate the network dropdown
 	function populateNetworkDropdown() {
@@ -2605,13 +2629,11 @@ function rawSubmitDefault(btn){
 		if (window.rodOtc && window.rodOtc.engine) {
 			var ENGINE = window.rodOtc.engine;
 			var c = ENGINE.loadConfig();
-			if (settings.ROD && settings.ROD.apiUrl) c.rodApiUrl = settings.ROD.apiUrl;
-			c.altChains = c.altChains || {};
-			for (var ac in settings) {
-				if (ac !== 'ROD' && settings.hasOwnProperty(ac)) {
-					c.altChains[ac] = c.altChains[ac] || {};
-					if (settings[ac].apiUrl) c.altChains[ac].apiUrl = settings[ac].apiUrl;
-					if (settings[ac].apiType) c.altChains[ac].apiType = settings[ac].apiType;
+			c.chains = c.chains || {};
+			for (var settlementCode in settings) {
+				if (settings.hasOwnProperty(settlementCode) && c.chains[settlementCode]) {
+					if (settings[settlementCode].apiUrl) c.chains[settlementCode].apiUrl = settings[settlementCode].apiUrl;
+					if (settings[settlementCode].apiType) c.chains[settlementCode].apiType = settings[settlementCode].apiType;
 				}
 			}
 			ENGINE.saveConfig(c);
@@ -2698,13 +2720,12 @@ function rawSubmitDefault(btn){
 			coinjs.hdkey.pub =  $("#coinjs_hdpub").val()*1;
 			coinjs.hdkey.prv =  $("#coinjs_hdprv").val()*1;
 
-			/* Known networks go through setNetwork so Coins menu + APIs stay consistent */
-			if (coinjs.pub == 0x30){        // LTC
-				applyActiveCoin('LTC', {skipWallet: true});
-			} else if (coinjs.pub == 0x3c){ // ROD
-				applyActiveCoin('ROD', {skipWallet: true});
-			} else if (coinjs.pub == 0x1e){ // DOGE
-				applyActiveCoin('DOGE', {skipWallet: true});
+			/* Resolve a known network by the selected registry-backed option, not
+			   by a version byte. Different chains legitimately share P2PKH bytes
+			   (DOGE/DGB and BTC/BCH), so byte-only dispatch selects the wrong coin. */
+			var selectedNetworkCode = dropdownCodeMap[$('#coinjs_coin').val()] || '';
+			if (selectedNetworkCode && coinjs.networks[selectedNetworkCode] && $('#coinjs_coin').val() !== 'rod-testnet'){
+				applyActiveCoin(selectedNetworkCode, {skipWallet: true});
 			} else {
 				coinjs.bech32.hrp = coinjs.bech32.hrp || "rod";
 			}
@@ -2966,7 +2987,8 @@ function rawSubmitDefault(btn){
 		$("#fees .recommended .blockDateTime").html(now.toISOString());
 		$("#fees .recommended .txId").html('N/A');
 		$("#fees .recommended .txSize").html('N/A');
-		$("#fees .recommended .txFee").html(localFeeRod+' ROD/kB equivalent');
+		var feeDisplayUnit = (coinjs.getNetwork && coinjs.getNetwork().unit) || 'coin';
+		$("#fees .recommended .txFee").html(localFeeRod+' '+feeDisplayUnit+'/kB equivalent');
 		$("#fees .feeSatByte").html(localSatPerByte);
 		mathFees();
 		$("#feeStatsReload").attr('disabled', false);

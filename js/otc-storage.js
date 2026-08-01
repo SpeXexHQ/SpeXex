@@ -1,14 +1,14 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2026 SpaceXpanse
- * Fork-specific OTC storage helpers for SpeXex.
+ * Fork-specific OTC storage helpers for the SpaceXpanse ROD wallet.
  */
 
 (function(){
 	var root = window.rodOtc = window.rodOtc || {};
 	var storageModule = root.storage = root.storage || {};
-	var STORAGE_KEY = 'rodOtcState';
-	var STORAGE_VERSION = 1;
+	var STORAGE_KEY = 'spexSwapV2State';
+	var STORAGE_VERSION = 2;
 	var SENSITIVE_SESSION_FIELDS = {
 		localChildPrivateKey: true,
 		privateKeyHex: true,
@@ -45,37 +45,6 @@
 		return Crypto.util.bytesToHex(Crypto.SHA256(Crypto.charenc.UTF8.stringToBytes(stableStringify(payload)), {asBytes: true}));
 	}
 
-	/* Sessions persisted before the alice/bob -> seller/buyer rename must keep
-	   working: an un-migrated role makes every role branch in the automation
-	   fall through, which also silences the refund monitor and can strand
-	   funds. Normalising here (the single read path for swap state) keeps
-	   legacy swaps visible and refundable. */
-	var LEGACY_ROLE = { alice: 'seller', bob: 'buyer' };
-	var LEGACY_STATE = { ALICE_ROD_FUNDED: 'SELLER_ROD_FUNDED', BOB_ALT_FUNDED: 'BUYER_ALT_FUNDED' };
-	function migrateLegacySession(session){
-		if(!session || typeof session !== 'object') return session;
-		if(LEGACY_ROLE[session.role]) session.role = LEGACY_ROLE[session.role];
-		if(LEGACY_STATE[session.state]) session.state = LEGACY_STATE[session.state];
-		if(session.terms){
-			if(session.terms.aliceChildPubKey && session.terms.sellerChildPubKey == null){
-				session.terms.sellerChildPubKey = session.terms.aliceChildPubKey;
-			}
-			if(session.terms.bobChildPubKey && session.terms.buyerChildPubKey == null){
-				session.terms.buyerChildPubKey = session.terms.bobChildPubKey;
-			}
-			delete session.terms.aliceChildPubKey;
-			delete session.terms.bobChildPubKey;
-		}
-		if(coinjs.isArray(session.timeline)){
-			for(var i = 0; i < session.timeline.length; i++){
-				var entry = session.timeline[i];
-				if(entry && LEGACY_STATE[entry.state]) entry.state = LEGACY_STATE[entry.state];
-			}
-		}
-		return session;
-	}
-	storageModule.migrateLegacySession = migrateLegacySession;
-
 	function sanitizeSession(session){
 		var sanitizedSession = {};
 		for(var propertyName in (session || {})){
@@ -83,7 +52,7 @@
 				sanitizedSession[propertyName] = session[propertyName];
 			}
 		}
-		return migrateLegacySession(sanitizedSession);
+		return sanitizedSession;
 	}
 
 	function sanitizeState(state){
@@ -177,7 +146,7 @@
 		var exportedPayload = JSON.parse(exportedState).payload;
 		var corruptRejected = false;
 		try {
-			storageModule.importState('{"version":1,"payload":{"sessions":{}},"checksum":"deadbeef"}');
+			storageModule.importState('{"version":2,"payload":{"sessions":{}},"checksum":"deadbeef"}');
 		} catch(error){
 			corruptRejected = true;
 		}

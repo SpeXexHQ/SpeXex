@@ -2,7 +2,8 @@
 # Complete release gate:
 #   1. deterministic Node contract/security/release/mutation checks
 #   2. real-browser integration + offline PWA check
-#   3. independently validated settlement matrix for every OTC counter chain
+#   3. independently validated settlement matrix for every ordered pair of
+#      distinct certified chains
 set -u
 set -o pipefail
 cd "$(dirname "$0")"
@@ -10,7 +11,6 @@ cd "$(dirname "$0")"
 FAILED=0
 RESULTS=()
 NODE_BIN="${NODE_BIN:-}"
-SUPPORTED_SWAP_CHAINS=(LTC DOGE)
 DOGE_ROD_REFUND_REPEATS="${DOGE_ROD_REFUND_REPEATS:-3}"
 
 if [ -z "$NODE_BIN" ]; then
@@ -22,6 +22,14 @@ if [ -z "$NODE_BIN" ]; then
     echo "node not found in PATH; set NODE_BIN to a Node executable"
     exit 127
   fi
+fi
+
+mapfile -t SUPPORTED_SWAP_PAIRS < <(
+  "$NODE_BIN" -e "const codes=require('../../js/chain-registry.js').swapCodes(); for(const asset of codes) for(const payment of codes) if(asset!==payment) console.log(asset+':'+payment)"
+)
+if [ "${#SUPPORTED_SWAP_PAIRS[@]}" -eq 0 ]; then
+  echo "chain registry must contain at least two certified chains"
+  exit 65
 fi
 
 if ! [[ "$DOGE_ROD_REFUND_REPEATS" =~ ^[1-9][0-9]*$ ]] || [ "$DOGE_ROD_REFUND_REPEATS" -gt 20 ]; then
@@ -86,17 +94,19 @@ else
       echo "The single-context browser gate ran, but that mode invalidates Alice/Bob settlement isolation."
       record "two-peer browser isolation preflight" 1
     else
-      for CHAIN in "${SUPPORTED_SWAP_CHAINS[@]}"; do
-        run_e2e "e2e $CHAIN happy path"       ALT_CHAIN="$CHAIN" SCENARIO=happy
-        run_e2e "e2e $CHAIN ROD-leg refund"   ALT_CHAIN="$CHAIN" SCENARIO=refund
-        run_e2e "e2e $CHAIN alt-leg refund"   ALT_CHAIN="$CHAIN" SCENARIO=altrefund
-        run_e2e "e2e $CHAIN reload recovery"  ALT_CHAIN="$CHAIN" SCENARIO=happy RELOAD_TEST=1
+      for PAIR in "${SUPPORTED_SWAP_PAIRS[@]}"; do
+        ASSET_CHAIN="${PAIR%%:*}"
+        PAYMENT_CHAIN="${PAIR#*:}"
+        run_e2e "e2e $ASSET_CHAIN/$PAYMENT_CHAIN happy path"       ASSET_CHAIN="$ASSET_CHAIN" PAYMENT_CHAIN="$PAYMENT_CHAIN" SCENARIO=happy
+        run_e2e "e2e $ASSET_CHAIN/$PAYMENT_CHAIN asset refund"     ASSET_CHAIN="$ASSET_CHAIN" PAYMENT_CHAIN="$PAYMENT_CHAIN" SCENARIO=refund
+        run_e2e "e2e $ASSET_CHAIN/$PAYMENT_CHAIN payment refund"   ASSET_CHAIN="$ASSET_CHAIN" PAYMENT_CHAIN="$PAYMENT_CHAIN" SCENARIO=altrefund
+        run_e2e "e2e $ASSET_CHAIN/$PAYMENT_CHAIN reload recovery"  ASSET_CHAIN="$ASSET_CHAIN" PAYMENT_CHAIN="$PAYMENT_CHAIN" SCENARIO=happy RELOAD_TEST=1
       done
 
-      if [ "$DOGE_ROD_REFUND_REPEATS" -gt 1 ]; then
+      if [[ " ${SUPPORTED_SWAP_PAIRS[*]} " == *" ROD:DOGE "* ]] && [ "$DOGE_ROD_REFUND_REPEATS" -gt 1 ]; then
         for ((RUN=2; RUN<=DOGE_ROD_REFUND_REPEATS; RUN++)); do
-          run_e2e "stress DOGE ROD-leg refund $RUN/$DOGE_ROD_REFUND_REPEATS" \
-            ALT_CHAIN=DOGE SCENARIO=refund HARNESS_REPEAT_INDEX="$RUN"
+          run_e2e "stress ROD/DOGE asset refund $RUN/$DOGE_ROD_REFUND_REPEATS" \
+            ASSET_CHAIN=ROD PAYMENT_CHAIN=DOGE SCENARIO=refund HARNESS_REPEAT_INDEX="$RUN"
         done
       fi
     fi

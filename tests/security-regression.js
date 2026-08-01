@@ -89,6 +89,7 @@ vm.createContext(context);
 	'js/ripemd160.js',
 	'js/jsbn.js',
 	'js/ellipticcurve.js',
+	'js/chain-registry.js',
 	'js/coin.js',
 	'js/ecdsa-adaptor.js',
 	'js/otc-chains.js',
@@ -106,6 +107,7 @@ const SWAP = context.rodOtc.swap;
 const CHAINS = context.rodOtc.chains;
 const ADAPTOR = context.rodOtc.adaptor;
 const ENGINE = context.rodOtc.engine;
+const STORAGE = context.rodOtc.storage;
 
 function expectThrow(fn, pattern, label) {
 	let thrown = null;
@@ -163,7 +165,7 @@ function testNostrSignatures() {
 	);
 
 	const contentTampered = JSON.parse(JSON.stringify(valid));
-	contentTampered.content = JSON.stringify({ version: 1, swapId: valid.swapId, type: 'swap_complete', sequence: 99 });
+	contentTampered.content = JSON.stringify({ version: 2, swapId: valid.swapId, type: 'swap_complete', sequence: 99 });
 	expectThrow(() => NOSTR.validateEnvelope(contentTampered), /ID mismatch/i, 'tampered event content');
 
 	const signatureTampered = JSON.parse(JSON.stringify(valid));
@@ -261,31 +263,51 @@ function testTermsHashHardFailure() {
 
 function testRefundOrdering() {
 	const validLtc = {
-		altChain: 'LTC',
-		refundRodHeight: 100480,
-		altRefundLockHeight: 200024,
-		rodConfirmations: 1,
-		altConfirmations: 1
+		assetChain: 'ROD',
+		paymentChain: 'LTC',
+		assetRefundLockHeight: 100480,
+		paymentRefundLockHeight: 200024,
+		assetConfirmations: 1,
+		paymentConfirmations: 1
 	};
 	const validDoge = {
-		altChain: 'DOGE',
-		refundRodHeight: 100480,
-		altRefundLockHeight: 300060,
-		rodConfirmations: 1,
-		altConfirmations: 6
+		assetChain: 'ROD',
+		paymentChain: 'DOGE',
+		assetRefundLockHeight: 100480,
+		paymentRefundLockHeight: 300060,
+		assetConfirmations: 1,
+		paymentConfirmations: 6
 	};
 	const ltc = SWAP.assertRefundOrdering(validLtc, 100000, 200000);
 	const doge = SWAP.assertRefundOrdering(validDoge, 100000, 300000);
-	assert(ltc.rodRemainingSeconds > ltc.altRemainingSeconds + ltc.safetyMarginSeconds);
-	assert(doge.rodRemainingSeconds > doge.altRemainingSeconds + doge.safetyMarginSeconds);
+	assert(ltc.assetRemainingSeconds > ltc.paymentRemainingSeconds + ltc.safetyMarginSeconds);
+	assert(doge.assetRemainingSeconds > doge.paymentRemainingSeconds + doge.safetyMarginSeconds);
+	const reversed = SWAP.assertRefundOrdering({
+		assetChain: 'LTC',
+		paymentChain: 'ROD',
+		releaseRodHeight: 300030,
+		assetRefundLockHeight: 200000 + CHAINS.getRefundBlocks('LTC', 'asset'),
+		paymentRefundLockHeight: 300000 + CHAINS.getRefundBlocks('ROD', 'payment'),
+		assetConfirmations: 1,
+		paymentConfirmations: 1
+	}, 200000, 300000, 300000);
+	assert(reversed.assetRemainingSeconds > reversed.paymentRemainingSeconds + reversed.safetyMarginSeconds,
+		'reversed LTC/ROD roles must receive safe role-specific default windows');
+	for (const code of CHAINS.codes()) {
+		assert.strictEqual(CHAINS.getRefundBlocks(code, 'asset') * CHAINS.getPolicy(code).blockSeconds, 4 * 60 * 60,
+			code + ' asset refund should target four hours');
+		assert.strictEqual(CHAINS.getRefundBlocks(code, 'payment') * CHAINS.getPolicy(code).blockSeconds, 60 * 60,
+			code + ' payment refund should target one hour');
+	}
 
 	expectThrow(
 		() => SWAP.assertRefundOrdering({
-			altChain: 'LTC',
-			refundRodHeight: 100120,
-			altRefundLockHeight: 200120,
-			rodConfirmations: 1,
-			altConfirmations: 1
+			assetChain: 'ROD',
+			paymentChain: 'LTC',
+			assetRefundLockHeight: 100120,
+			paymentRefundLockHeight: 200120,
+			assetConfirmations: 1,
+			paymentConfirmations: 1
 		}, 100000, 200000),
 		/refund ordering/i,
 		'later alt-chain refund'
@@ -293,11 +315,12 @@ function testRefundOrdering() {
 
 	expectThrow(
 		() => SWAP.assertRefundOrdering({
-			altChain: 'DOGE',
-			refundRodHeight: 100480,
-			altRefundLockHeight: 300470,
-			rodConfirmations: 1,
-			altConfirmations: 6
+			assetChain: 'ROD',
+			paymentChain: 'DOGE',
+			assetRefundLockHeight: 100480,
+			paymentRefundLockHeight: 300470,
+			assetConfirmations: 1,
+			paymentConfirmations: 6
 		}, 100000, 300000),
 		/refund ordering/i,
 		'DOGE wall-clock reversal'
@@ -305,11 +328,12 @@ function testRefundOrdering() {
 
 	expectThrow(
 		() => SWAP.assertRefundOrdering({
-			altChain: 'LTC',
-			refundRodHeight: 100140,
-			altRefundLockHeight: 200016,
-			rodConfirmations: 1,
-			altConfirmations: 1
+			assetChain: 'ROD',
+			paymentChain: 'LTC',
+			assetRefundLockHeight: 100140,
+			paymentRefundLockHeight: 200016,
+			assetConfirmations: 1,
+			paymentConfirmations: 1
 		}, 100000, 200000),
 		/refund ordering/i,
 		'exact safety-margin boundary must fail because action time must remain'
@@ -320,8 +344,8 @@ function testRefundOrdering() {
 		'expired ROD refund'
 	);
 	expectThrow(
-		() => SWAP.assertRefundOrdering(Object.assign({}, validLtc, { altChain: 'DGB' }), 100000, 200000),
-		/unsupported alt chain/i,
+		() => SWAP.assertRefundOrdering(Object.assign({}, validLtc, { paymentChain: 'DGB' }), 100000, 200000),
+		/unsupported swap chain/i,
 		'wallet-only chain used as swap counter chain'
 	);
 }
@@ -329,7 +353,7 @@ function testRefundOrdering() {
 function testRuntimeBoundaryWiring() {
 	const uiSource = fs.readFileSync(path.join(root, 'js/otc-app-ui.js'), 'utf8');
 	const engineSource = fs.readFileSync(path.join(root, 'js/otc-engine.js'), 'utf8');
-	const incomingCheck = uiSource.indexOf('SWAP.assertRefundOrdering(terms, freshTips.rodHeight, freshTips.altHeight)');
+	const incomingCheck = uiSource.indexOf('SWAP.assertRefundOrdering(terms, freshTips.assetHeight, freshTips.paymentHeight, freshTips.controlHeight)');
 	const incomingCreate = uiSource.indexOf('var session = SWAP.createOfferSession({', incomingCheck);
 	assert(incomingCheck !== -1 && incomingCreate > incomingCheck,
 		'incoming terms must pass refund ordering before a session is created');
@@ -363,7 +387,7 @@ function testPreservedProtocolBehavior() {
 }
 
 function testBilateralTermsReconstruction() {
-	localStorage.removeItem('rodOtcState');
+	localStorage.removeItem('spexSwapV2State');
 	const seller = SWAP.createSwapAccount('security seller fixture');
 	const buyer = SWAP.createSwapAccount('security buyer fixture');
 	const swapId = SWAP.swapIdFromOrder('security/order', '1', 'seller', 'buyer', 'nonce');
@@ -373,21 +397,22 @@ function testBilateralTermsReconstruction() {
 	const common = {
 		swapId,
 		orderId: 'security/order',
-		altChain: 'DOGE',
-		rodAmount: '10.00000000',
-		altAmount: '20.00000000',
+		assetChain: 'ROD',
+		paymentChain: 'DOGE',
+		assetAmount: '10.00000000',
+		paymentAmount: '20.00000000',
 		sellerSwapXpub: seller.xpub,
 		buyerSwapXpub: buyer.xpub,
 		releaseRodHeight: 100100,
-		sellerAltPayoutAddress: CHAINS.publicKeyToAddress('DOGE', sellerKeys.publicKey, 'legacy'),
-		buyerRodPayoutAddress: CHAINS.publicKeyToAddress('ROD', buyerKeys.publicKey, 'legacy'),
+		sellerPaymentPayoutAddress: CHAINS.publicKeyToAddress('DOGE', sellerKeys.publicKey, 'legacy'),
+		buyerAssetPayoutAddress: CHAINS.publicKeyToAddress('ROD', buyerKeys.publicKey, 'legacy'),
 		sellerIdentity: 'seller',
 		buyerIdentity: 'buyer',
 		termsNonce: 'nonce',
-		refundRodHeight: 100480,
-		altRefundLockHeight: 300060,
-		rodConfirmations: 1,
-		altConfirmations: 6
+		assetRefundLockHeight: 100480,
+		paymentRefundLockHeight: 300060,
+		assetConfirmations: 1,
+		paymentConfirmations: 6
 	};
 	const sender = SWAP.createOfferSession(Object.assign({
 		role: 'seller',
@@ -403,6 +428,48 @@ function testBilateralTermsReconstruction() {
 		'receiver must derive the same local child public key');
 	assert.strictEqual(receiver.terms.termsHash, sender.terms.termsHash,
 		'legitimate sender and receiver must reconstruct the same canonical terms hash');
+
+	/* Roles are per swap, not properties of separate coin packages. Prove the
+	   same engine can place LTC on the asset side and ROD on the payment side. */
+	const reversed = SWAP.createOfferSession(Object.assign({}, common, {
+		role: 'seller',
+		assetChain: 'LTC',
+		paymentChain: 'ROD',
+		sellerSwapAccountKey: seller.xprv,
+		buyerSwapAccountKey: buyer.xpub,
+		sellerPaymentPayoutAddress: CHAINS.publicKeyToAddress('ROD', sellerKeys.publicKey, 'legacy'),
+		buyerAssetPayoutAddress: CHAINS.publicKeyToAddress('LTC', buyerKeys.publicKey, 'legacy')
+	}));
+	assert.strictEqual(reversed.terms.pair, 'LTC/ROD');
+	assert.strictEqual(reversed.terms.assetClaimFee, CHAINS.getFees('LTC').claim);
+	assert.strictEqual(reversed.terms.paymentClaimFee, CHAINS.getFees('ROD').claim);
+}
+
+function testProtocolV1Isolation() {
+	values.clear();
+	values.set('rodOtcState', JSON.stringify({ version: 1, payload: { sessions: { old: { swapId: 'old' } } } }));
+	values.set('rodOtcLive', JSON.stringify({ old: { swapId: 'old', state: 'PREPARED' } }));
+	values.set('rodOtcEngineConfig', JSON.stringify({ rodApiUrl: 'https://legacy.invalid' }));
+	assert.deepStrictEqual(Object.keys(STORAGE.load().sessions), [], 'v1 storage state must be invisible to v2');
+	assert.deepStrictEqual(Object.keys(ENGINE.loadLive()), [], 'v1 live swaps must not be readable or resumable');
+	assert.strictEqual(ENGINE.loadConfig().chains.ROD.apiUrl, CHAINS.getDefinition('ROD').apiUrl,
+		'v1 engine config must not be migrated into v2');
+
+	const oldOffer = ENGINE.normalizeOffer('d/otc-swap/legacy', {
+		version: 1,
+		type: 'otc-order',
+		pair: 'ROD/LTC',
+		assetChain: 'ROD',
+		paymentChain: 'LTC',
+		give: '1',
+		want: '1'
+	});
+	assert.strictEqual(oldOffer.ok, false, 'v1 ROD/LTC orderbook entries must be ignored');
+
+	const oldEvent = signedFixture('07'.padStart(64, '0'));
+	oldEvent.kind = 7340;
+	expectThrow(() => NOSTR.validateEnvelope(oldEvent), /unsupported.*kind/i,
+		'v1 swap event kind must not enter the v2 engine');
 }
 
 function testRecoveryExportImportRestoresLiveSwap() {
@@ -412,9 +479,9 @@ function testRecoveryExportImportRestoresLiveSwap() {
 		swapId,
 		role: 'seller',
 		state: 'PREPARED',
-		terms: { termsHash: 'terms-hash', altChain: 'DOGE' },
-		rodRefund: { signedHex: 'aa'.repeat(120), localSig: 'bb' },
-		altRefund: { signedHex: 'cc'.repeat(120), localSig: 'dd' },
+		terms: { protocol: 2, termsHash: 'terms-hash', pair: 'ROD/DOGE', assetChain: 'ROD', paymentChain: 'DOGE' },
+		assetRefund: { signedHex: 'aa'.repeat(120), localSig: 'bb' },
+		paymentRefund: { signedHex: 'cc'.repeat(120), localSig: 'dd' },
 		localChildPrivateKey: 'raw-private-key-must-not-export',
 		adaptorSecret: 'raw-adaptor-secret-must-not-export',
 		localNostrPrivateKey: 'raw-nostr-secret-must-not-export',
@@ -424,7 +491,7 @@ function testRecoveryExportImportRestoresLiveSwap() {
 	};
 	ENGINE.saveConfig({
 		relays: ['wss://relay.example'],
-		rodApiUrl: 'https://api.example.invalid',
+		chains: { ROD: { apiUrl: 'https://api.example.invalid', apiType: 'rod', refundBlocks: { asset: 480, payment: 120 }, confirmations: 1 } },
 		rpcUrl: 'http://user:pass@127.0.0.1:18080/wallet/ROD',
 		rpcPort: '18080',
 		rpcUser: 'user',
@@ -434,8 +501,8 @@ function testRecoveryExportImportRestoresLiveSwap() {
 	ENGINE.saveLive(session);
 	ENGINE.recordTrade(Object.assign({}, session, {
 		orderId: 'recoverable-order',
-		terms: Object.assign({}, session.terms, { rodAmount: '1.00000000', altAmount: '2.00000000' }),
-		execution: { rodFunding: { txid: 'rod-funding' }, altFunding: { txid: 'alt-funding' } }
+		terms: Object.assign({}, session.terms, { assetAmount: '1.00000000', paymentAmount: '2.00000000' }),
+		execution: { assetFunding: { txid: 'rod-funding' }, paymentFunding: { txid: 'alt-funding' } }
 	}));
 
 	const exported = ENGINE.exportRecoveryState();
@@ -445,8 +512,8 @@ function testRecoveryExportImportRestoresLiveSwap() {
 	assert(!exported.includes('user:pass'), 'recovery export must not contain RPC URL credentials');
 	assert(!exported.includes('"rpcUser"'), 'recovery export must not contain RPC username');
 	assert(!exported.includes('"rpcPass"'), 'recovery export must not contain RPC password');
-	assert(exported.includes('rodOtcHex_' + swapId + '_rodRefund_signedHex'), 'recovery export must include offloaded ROD refund hex');
-	assert(exported.includes('rodOtcHex_' + swapId + '_altRefund_signedHex'), 'recovery export must include offloaded alt refund hex');
+	assert(exported.includes('spexSwapV2Hex_' + swapId + '_assetRefund_signedHex'), 'recovery export must include offloaded asset refund hex');
+	assert(exported.includes('spexSwapV2Hex_' + swapId + '_paymentRefund_signedHex'), 'recovery export must include offloaded payment refund hex');
 
 	values.clear();
 	ENGINE.saveConfig({ rpcUrl: 'http://127.0.0.1:19090', rpcUser: 'local-user', rpcPass: 'local-pass' });
@@ -459,9 +526,9 @@ function testRecoveryExportImportRestoresLiveSwap() {
 	assert(restored, 'imported live session must be visible to restoreLive');
 	assert.strictEqual(restored.role, 'seller');
 	assert.strictEqual(restored.state, 'PREPARED');
-	assert.strictEqual(restored.rodRefund.signedHex, 'aa'.repeat(120), 'ROD refund hex must be restored from blob storage');
-	assert.strictEqual(restored.altRefund.signedHex, 'cc'.repeat(120), 'alt refund hex must be restored from blob storage');
-	assert.strictEqual(ENGINE.loadConfig().rodApiUrl, 'https://api.example.invalid', 'recovery import must restore settings');
+	assert.strictEqual(restored.assetRefund.signedHex, 'aa'.repeat(120), 'ROD refund hex must be restored from blob storage');
+	assert.strictEqual(restored.paymentRefund.signedHex, 'cc'.repeat(120), 'alt refund hex must be restored from blob storage');
+	assert.strictEqual(ENGINE.loadConfig().chains.ROD.apiUrl, 'https://api.example.invalid', 'recovery import must restore chain settings');
 	assert.strictEqual(ENGINE.loadConfig().rpcUrl, 'http://127.0.0.1:19090', 'recovery import must preserve machine-local RPC URL');
 	assert.strictEqual(ENGINE.loadConfig().rpcUser, 'local-user', 'recovery import must preserve machine-local RPC username');
 	assert.strictEqual(ENGINE.loadConfig().rpcPass, 'local-pass', 'recovery import must preserve machine-local RPC password');
@@ -477,7 +544,7 @@ function testRecoveryExportImportRestoresLiveSwap() {
 		'conflict rejection must preserve the existing session');
 
 	const malformedBlob = JSON.parse(exported);
-	malformedBlob.payload.hexBlobs['rodOtcHex_' + swapId + '_unexpected_signedHex'] = 'aa';
+	malformedBlob.payload.hexBlobs['spexSwapV2Hex_' + swapId + '_unexpected_signedHex'] = 'aa';
 	malformedBlob.checksum = recoveryChecksum(malformedBlob.payload);
 	values.clear();
 	expectThrow(() => ENGINE.importRecoveryState(JSON.stringify(malformedBlob)), /invalid recovery blob/i,
@@ -491,16 +558,16 @@ function testRecoveryExportImportRestoresLiveSwap() {
 		swapId: 'existing-swap',
 		role: 'buyer',
 		state: 'OPEN',
-		terms: { termsHash: 'existing-terms', altChain: 'LTC' }
+		terms: { termsHash: 'existing-terms', paymentChain: 'LTC' }
 	};
 	ENGINE.saveLive(existing);
-	const existingBefore = localStorage.getItem('rodOtcLive');
-	failStorageKey = 'rodOtcHex_' + swapId + '_rodRefund_signedHex';
+	const existingBefore = localStorage.getItem('spexSwapV2Live');
+	failStorageKey = 'spexSwapV2Hex_' + swapId + '_assetRefund_signedHex';
 	expectThrow(() => ENGINE.importRecoveryState(exported), /existing local state was restored/i,
 		'failed import must report successful rollback');
-	assert.strictEqual(localStorage.getItem('rodOtcLive'), existingBefore,
+	assert.strictEqual(localStorage.getItem('spexSwapV2Live'), existingBefore,
 		'failed import must restore the prior live-session map');
-	assert.strictEqual(localStorage.getItem('rodOtcHex_' + swapId + '_rodRefund_signedHex'), null,
+	assert.strictEqual(localStorage.getItem('spexSwapV2Hex_' + swapId + '_assetRefund_signedHex'), null,
 		'failed import must remove partially written recovery blobs');
 }
 
@@ -513,6 +580,7 @@ const tests = [
 	['runtime security boundary wiring', testRuntimeBoundaryWiring],
 	['preserved protocol and DOGE vectors', testPreservedProtocolBehavior],
 	['bilateral canonical terms reconstruction', testBilateralTermsReconstruction],
+	['protocol v1 storage, order, and event isolation', testProtocolV1Isolation],
 	['recovery export/import restores live swap state', testRecoveryExportImportRestoresLiveSwap]
 ];
 

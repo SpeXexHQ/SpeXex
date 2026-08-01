@@ -1,45 +1,49 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2026 SpaceXpanse
- * Fork-specific OTC multi-chain helpers for SpeXex.
+ * Fork-specific OTC multi-chain helpers for the SpaceXpanse ROD wallet.
  */
 
 (function(){
 	var root = window.rodOtc = window.rodOtc || {};
 	var chainsModule = root.chains = root.chains || {};
 
-	chainsModule.definitions = {
-		ROD: {
-			code: 'ROD',
-			pub: 0x3c,
-			priv: 0x4e,
-			multisig: 0x4b,
-			bech32Hrp: 'rod',
-			segwit: true,
-			decimals: 8
-		},
-		LTC: {
-			code: 'LTC',
-			pub: 0x30,
-			priv: 0xb0,
-			multisig: 0x32,
-			bech32Hrp: 'ltc',
-			segwit: true,
-			decimals: 8
-		},
-		/* Dogecoin mainnet — dogecoin/dogecoin src/chainparams.cpp.
-		   SegWit is permanently disabled (DEPLOYMENT_SEGWIT.nTimeout = 0 and
-		   IsWitnessEnabled() hard-returns false); Dogecoin Core contains no
-		   bech32 implementation at all, so there is no HRP. */
-		DOGE: {
-			code: 'DOGE',
-			pub: 0x1e,
-			priv: 0x9e,
-			multisig: 0x16,
-			bech32Hrp: '',
-			segwit: false,
-			decimals: 8
+	if(!window.spexChainRegistry){
+		throw new Error('SpeXex chain registry must load before otc-chains.js');
+	}
+	chainsModule.definitions = window.spexChainRegistry.swapDefinitions();
+
+	/* One registry, one adapter contract. A coin can occupy either settlement
+	   role in a swap; the offer decides the role, not a separate package. */
+	chainsModule.codes = function(){
+		var codes = [];
+		for(var code in chainsModule.definitions){
+			if(chainsModule.definitions.hasOwnProperty(code)) codes.push(code);
 		}
+		return codes.sort();
+	};
+
+	chainsModule.getDefinition = function(chainCode){
+		return getDefinition(String(chainCode || '').toUpperCase());
+	};
+
+	chainsModule.getFees = function(chainCode){
+		var definition = getDefinition(String(chainCode || '').toUpperCase());
+		if(!definition.fees || !definition.fees.claim || !definition.fees.refund || !definition.fees.funding){
+			throw new Error('No settlement fees registered for chain: ' + chainCode);
+		}
+		return definition.fees;
+	};
+
+	chainsModule.getRefundBlocks = function(chainCode, role){
+		var definition = getDefinition(String(chainCode || '').toUpperCase());
+		var settlementRole = String(role || '').toLowerCase();
+		if(settlementRole !== 'asset' && settlementRole !== 'payment'){
+			throw new Error('Refund role must be asset or payment');
+		}
+		var blocks = definition.refundBlocks && parseInt(definition.refundBlocks[settlementRole], 10);
+		if(!(blocks > 0)) throw new Error('No ' + settlementRole + ' refund window registered for chain: ' + chainCode);
+		return blocks;
 	};
 
 	/* ------------------------------------------------------------------
@@ -78,37 +82,7 @@
 	   ROD keeps feeRatePerByte 0, meaning "use the caller-supplied fee
 	   verbatim". The ROD default term fees already clear its ~232 sat/B
 	   mainnet relay floor, and 0 preserves existing ROD behaviour exactly. */
-	chainsModule.policy = {
-		ROD: {
-			feeRatePerByte: 0,
-			relayFloorPerByte: 0,
-			hardDustSats: 546,
-			softDustSats: 0,
-			dustSurchargeSats: 0,
-			changeThresholdSats: 546,
-			blockSeconds: 30
-		},
-		LTC: {
-			feeRatePerByte: 2,
-			relayFloorPerByte: 1,
-			hardDustSats: 546,
-			softDustSats: 0,
-			dustSurchargeSats: 0,
-			changeThresholdSats: 546,
-			blockSeconds: 150
-		},
-		DOGE: {
-			feeRatePerByte: 1000,
-			relayFloorPerByte: 100,
-			hardDustSats: 100000,
-			softDustSats: 1000000,
-			dustSurchargeSats: 1000000,
-			/* Dogecoin Core 1.14.6 wallet: smallest useful change is
-			   discardThreshold + 2 * minTxFee(1000 bytes) = 0.03 DOGE. */
-			changeThresholdSats: 3000000,
-			blockSeconds: 60
-		}
-	};
+	chainsModule.policy = window.spexChainRegistry.swapPolicies();
 
 	/* Throws rather than defaulting. Falling back to ROD's policy would mean a
 	   newly registered chain silently inherits "no fee floor, 546-unit dust",
@@ -330,6 +304,17 @@
 		var vectorsMatch = vectorP2pkh === 'DFpN6QqFfUm3gKNaxN6tNcab1FArL9cZLE'
 			&& vectorMultisig.address === '9tAfWptDmGyYyFjKKr5VpApUKzq9hFpBJ1'
 			&& vectorMultisig.redeemScript === '52210279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f817982102c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee552ae';
+		var registryVectorsMatch = true;
+		var failedRegistryVector = '';
+		chainsModule.codes().forEach(function(code){
+			var certification = window.spexChainRegistry.getProfile(code).swap.certification;
+			var p2pkh = chainsModule.publicKeyToAddress(code, vectorKey1, 'legacy');
+			var p2sh = chainsModule.publicKeysToMultisig(code, [vectorKey1, vectorKey2], 2).address;
+			if(p2pkh !== certification.p2pkhVector || p2sh !== certification.p2sh2of2Vector){
+				registryVectorsMatch = false;
+				failedRegistryVector = code;
+			}
+		});
 
 		/* Dogecoin has no SegWit, so requesting a bech32 address must fail
 		   rather than silently mint an address no node will ever accept. */
@@ -354,12 +339,14 @@
 			passed: rodAddress === expectedRodAddress && beforeGlobals === afterGlobals
 				&& ltcAddress !== rodAddress && dogeAddress !== rodAddress && dogeAddress !== ltcAddress
 				&& dogeAddress.charAt(0) === 'D'
-				&& vectorsMatch && dogeBech32Rejected && policySane,
+				&& vectorsMatch && registryVectorsMatch && dogeBech32Rejected && policySane,
 			rodAddress: rodAddress,
 			expectedRodAddress: expectedRodAddress,
 			ltcAddress: ltcAddress,
 			dogeAddress: dogeAddress,
 			dogeVectorsMatch: vectorsMatch,
+			registryVectorsMatch: registryVectorsMatch,
+			failedRegistryVector: failedRegistryVector,
 			dogeBech32Rejected: dogeBech32Rejected,
 			dogePolicySane: policySane,
 			globalsStable: beforeGlobals === afterGlobals

@@ -2,11 +2,11 @@
 <html lang="en">
 	<head>
 
-		<title>SpeXex</title>
+		<title>SpaceXpanse ROD Wallet by rod-web-wallet</title>
 
 		<meta http-equiv="content-type" content="text/html;charset=utf-8" />
 		<meta name="keywords" content="spacexpanse, rod, wallet, multisig, multisignature, address, browser, segwit, javascript, js, broadcast, transaction, verify, decode" />
-		<meta name="description" content="SpeXex is a static browser-based SpaceXpanse ROD wallet for creating addresses, signing transactions, and broadcasting raw transactions." />
+		<meta name="description" content="A SpaceXpanse ROD Wallet written in Javascript. Supports Multisig, SegWit, custom transactions, nLockTime and more!" />
 
 		<meta http-equiv="X-UA-Compatible" content="IE=edge">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,7 +14,7 @@
 		<meta name="mobile-web-app-capable" content="yes">
 		<meta name="apple-mobile-web-app-capable" content="yes">
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-		<meta name="apple-mobile-web-app-title" content="SpeXex">
+		<meta name="apple-mobile-web-app-title" content="ROD Wallet">
 
 		<link rel="manifest" href="manifest.webmanifest">
 		<link rel="icon" type="image/png" sizes="32x32" href="images/icon-32.png">
@@ -45,6 +45,7 @@
 		<script type="text/javascript" src="js/jsbn.js"></script>
 		<script type="text/javascript" src="js/ellipticcurve.js"></script>
 
+		<script type="text/javascript" src="js/chain-registry.js"></script>
 		<script type="text/javascript" src="js/coin.js"></script>
 		<script type="text/javascript" src="js/otc-explorer.js"></script>
 		<script type="text/javascript" src="js/ecdsa-adaptor.js"></script>
@@ -89,16 +90,8 @@
 						<ul class="nav navbar-nav">
 							<li class="dropdown" id="coinsMenu">
 								<a href="#" class="dropdown-toggle" data-toggle="dropdown"><span class="glyphicon glyphicon-th-list"></span> Coins <span id="activeCoinBadge" class="label label-info">ROD</span> <b class="caret"></b></a>
-								<ul class="dropdown-menu">
-									<li class="dropdown-header">Active coin</li>
-									<li><a href="javascript:;" class="walletCoinSelect" data-coin="ROD"><span class="glyphicon glyphicon-ok coin-check" data-coin="ROD"></span> ROD <small class="text-muted">SpaceXpanse</small></a></li>
-									<li><a href="javascript:;" class="walletCoinSelect" data-coin="LTC"><span class="glyphicon glyphicon-ok coin-check hidden" data-coin="LTC"></span> LTC <small class="text-muted">Litecoin</small></a></li>
-									<li><a href="javascript:;" class="walletCoinSelect" data-coin="DOGE"><span class="glyphicon glyphicon-ok coin-check hidden" data-coin="DOGE"></span> DOGE <small class="text-muted">Dogecoin</small></a></li>
-									<li class="divider"></li>
-									<li class="dropdown-header">Wallet only</li>
-									<li><a href="javascript:;" class="walletCoinSelect" data-coin="BTC"><span class="glyphicon glyphicon-ok coin-check hidden" data-coin="BTC"></span> BTC <small class="text-muted">Bitcoin</small></a></li>
-									<li><a href="javascript:;" class="walletCoinSelect" data-coin="BCH"><span class="glyphicon glyphicon-ok coin-check hidden" data-coin="BCH"></span> BCH <small class="text-muted">Bitcoin Cash</small></a></li>
-									<li><a href="javascript:;" class="walletCoinSelect" data-coin="DGB"><span class="glyphicon glyphicon-ok coin-check hidden" data-coin="DGB"></span> DGB <small class="text-muted">DigiByte</small></a></li>
+								<ul class="dropdown-menu" id="walletCoinMenu">
+									<li class="dropdown-header">Loading chain registry…</li>
 								</ul>
 							</li>
 							<li class="dropdown">
@@ -148,7 +141,7 @@
 					<div class="tab-pane tab-content active" id="home">
 						<div class="row">
 							<div class="col-md-12">
-							<h2>SpeXex <small>Welcome to the Blockchain</small></h2>
+								<h2>SpaceXpanse ROD Wallet <small>Welcome to the Blockchain</small></h2>
 							</div>
 						</div>
 
@@ -245,7 +238,7 @@
 							<div class="col-md-4">
 								<div class="rod-feature-card">
 									<h3><span class="glyphicon glyphicon-random"></span> Multi-chain</h3>
-									<p>Currently supports ROD ↔ LTC and ROD ↔ DOGE swaps, with wallet-level support for BTC, BCH, and DGB. More chains coming soon.</p>
+									<p>ROD, LTC, and DOGE are currently swap-certified and any two can be paired in either direction. BTC, BCH, and DGB currently have wallet-level support only. More chains are being added through the same reviewed registry.</p>
 								</div>
 							</div>
 						</div>
@@ -1557,12 +1550,12 @@
 
 					<div class="tab-pane tab-content" id="about">
 						<h2>About</h2>
-						<p>GitHub <a href="https://github.com/SpaceXpanse/SpeXex">https://github.com/SpaceXpanse/SpeXex</a></p>
+						<p>GitHub <a href="https://github.com/SpaceXpanse/rod-web-wallet">https://github.com/SpaceXpanse/rod-web-wallet</a></p>
 					</div>
 
 					<div class="tab-pane tab-content" id="settings">
-					 <h2>Settings <small> making SpeXex even better!</small></h2>
-					 <p>These simple settings below make SpeXex one of the most decentralized wallets in the world.</p>
+					 <h2>Settings <small> making rod-web-wallet even better!</small></h2>
+					 <p>These simple settings below make rod-web-wallet one of the most decentralized wallets in the world.</p>
 
 					 <div class="row">
 					 <div class="col-md-12">
@@ -1610,7 +1603,7 @@
 
 							<br>
 
-							<div class="alert alert-info"> <span class="glyphicon glyphicon-info-sign"></span> You will not be able to automatically broadcast or retreive your unspent outputs from SpeXex when using this setting and will need to use your desktop client instead, however everything else such as creating key pairs, addresses, transaction generation and signing will continue to function normally.</div>
+							<div class="alert alert-info"> <span class="glyphicon glyphicon-info-sign"></span> You will not be able to automatically broadcast or retreive your unspent outputs from rod-web-wallet when using this setting and will need to use your desktop client instead, however everything else such as creating key pairs, addresses, transaction generation and signing will continue to function normally.</div>
 						</div>
 
 						<hr>
@@ -1637,7 +1630,7 @@
 					</div>
 
 					<br>
-					<p class="text-muted">This page uses JavaScript to generate your addresses and sign your transactions within your browser, which means we <i>never</i> receive your private keys. This can be independently verified by reviewing the source code on <a href="https://github.com/SpaceXpanse/SpeXex" target="_blank">GitHub</a>. You can even <a href="https://github.com/SpaceXpanse/SpeXex/archive/refs/heads/main.zip">download</a> this page and host it yourself or run it offline.</p>
+					<p class="text-muted">This page uses JavaScript to generate your addresses and sign your transactions within your browser, which means we <i>never</i> receive your private keys. This can be independently verified by reviewing the source code on <a href="https://github.com/SpaceXpanse/rod-web-wallet" target="_blank">GitHub</a>. You can even <a href="https://github.com/SpaceXpanse/rod-web-wallet/archive/refs/heads/main.zip">download</a> this page and host it yourself or run it offline.</p>
 					<br>
 
 				</div>
@@ -1646,7 +1639,7 @@
 
 		<div id="footer">
 			<div class="container text-right">
-	        		<p class="text-muted">Version 2.9.1-beta.1</p>
+	        		<p class="text-muted">Version 2.6.0-alpha.3</p>
 			</div>
 		</div>
 
@@ -1752,7 +1745,7 @@
 							-->
 
 							<select id="mediatorList" class="form-control">
-								<option value="02b6231cc602740c29436eafbb6448880f4058cc3d2745c709deee313104678277;support@spexex;1">SpeXex</option>
+								<option value="02b6231cc602740c29436eafbb6448880f4058cc3d2745c709deee313104678277;support@rod-web-wallet;1">rod-web-wallet</option>
 							</select>
 						</div>
 

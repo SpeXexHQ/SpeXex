@@ -14,6 +14,7 @@ const { Transaction, script: bscript, crypto: bcrypto } = require('bitcoinjs-lib
 const { secp256k1 } = require('@noble/curves/secp256k1');
 const bs58check = require('bs58check');
 const { WebSocketServer } = require('ws');
+const CHAIN_REGISTRY = require('../../js/chain-registry.js');
 
 function sha256d(buf) {
   const a = crypto.createHash('sha256').update(buf).digest();
@@ -28,26 +29,28 @@ function p2pkhScript(pubkeyHash) {
 function p2shScript(scriptHash) {
   return Buffer.concat([Buffer.from([0xa9, 0x14]), scriptHash, Buffer.from([0x87])]);
 }
-/* Base58 version bytes per chain, straight from each project's chainparams.
-   DOGE: PUBKEY_ADDRESS 30 (0x1e), SCRIPT_ADDRESS 22 (0x16). */
-const CHAIN_VERSIONS = {
-  ROD:  { pub: 0x3c, p2sh: 0x4b },
-  LTC:  { pub: 0x30, p2sh: 0x32 },
-  DOGE: { pub: 0x1e, p2sh: 0x16 },
-  BTC:  { pub: 0x00, p2sh: 0x05 },
-  BCH:  { pub: 0x00, p2sh: 0x05 }
-};
-const P2SH_VERSIONS = new Set(Object.values(CHAIN_VERSIONS).map((v) => v.p2sh));
-
-function addressToScript(address) {
+/* Independent validation consumes the same authoritative address records as
+   the browser. Adding a profile therefore cannot leave the mock decoder using
+   another chain's P2SH prefix. Chain-specific known vectors remain separate
+   tests so a wrong source record is still detected. */
+const CHAIN_VERSIONS = {};
+for (const code of CHAIN_REGISTRY.codes()) {
+  const profile = CHAIN_REGISTRY.getProfile(code);
+  CHAIN_VERSIONS[code] = { pub: profile.address.pub, p2sh: profile.address.multisig };
+}
+function addressToScript(address, chain) {
   const payload = Buffer.from(bs58check.decode(address));
   const version = payload[0];
   const hash = payload.subarray(1);
-  if (P2SH_VERSIONS.has(version)) return p2shScript(hash);
-  return p2pkhScript(hash);
+  const expected = CHAIN_VERSIONS[chain];
+  if (!expected) throw new Error('Unknown mock-chain address profile: ' + chain);
+  if (version === expected.p2sh) return p2shScript(hash);
+  if (version === expected.pub) return p2pkhScript(hash);
+  throw new Error(`Address version ${version} is not valid for mock chain ${chain}`);
 }
 function scriptToAddress(scriptBuf, chain) {
-  const versions = CHAIN_VERSIONS[chain] || CHAIN_VERSIONS.ROD;
+  const versions = CHAIN_VERSIONS[chain];
+  if (!versions) throw new Error('Unknown mock-chain address profile: ' + chain);
   const pubVer = versions.pub;
   const p2shVer = versions.p2sh;
   if (scriptBuf.length === 25 && scriptBuf[0] === 0x76) {
@@ -90,18 +93,23 @@ function verifyDerSig(sigWithHashType, msgHash, pubkey) {
    output on top of the size-proportional component. blockMinPerByte is not a
    relay rule — it is recorded so the harness can assert that what we broadcast
    would actually be MINED, not merely accepted into a mempool. */
-const CHAIN_POLICY = {
-  ROD:  { relayPerByte: 0,   hardDust: 546,    softDust: 0,       surcharge: 0,       blockMinPerByte: 0 },
-  LTC:  { relayPerByte: 1,   hardDust: 546,    softDust: 0,       surcharge: 0,       blockMinPerByte: 0 },
-  DOGE: { relayPerByte: 100, hardDust: 100000, softDust: 1000000, surcharge: 1000000, blockMinPerByte: 1000 },
-  BTC:  { relayPerByte: 1,   hardDust: 546,    softDust: 0,       surcharge: 0,       blockMinPerByte: 0 },
-  BCH:  { relayPerByte: 1,   hardDust: 546,    softDust: 0,       surcharge: 0,       blockMinPerByte: 0 }
-};
+const CHAIN_POLICY = {};
+for (const code of CHAIN_REGISTRY.swapCodes()) {
+  const source = CHAIN_REGISTRY.getProfile(code).swap.policy;
+  CHAIN_POLICY[code] = {
+    relayPerByte: source.relayFloorPerByte,
+    hardDust: source.hardDustSats,
+    softDust: source.softDustSats,
+    surcharge: source.dustSurchargeSats,
+    blockMinPerByte: source.feeRatePerByte
+  };
+}
 
 class MockChain {
   constructor(name) {
     this.name = name;              // 'ROD' | 'LTC' | 'DOGE'
-    this.policy = CHAIN_POLICY[name] || CHAIN_POLICY.ROD;
+    if (!CHAIN_POLICY[name]) throw new Error(`No certified mock policy for chain ${name}`);
+    this.policy = CHAIN_POLICY[name];
     this.utxos = new Map();        // 'txid:vout' -> {txid, vout, value, script(Buffer), address}
     this.txs = new Map();          // txid -> {hex, tx, vouts:[{value, script, address, spent}]}
     this.broadcasts = [];          // audit log: {txid, hex, valid, details}
@@ -109,7 +117,7 @@ class MockChain {
   }
   credit(address, valueSats) {
     const fakeTxid = crypto.randomBytes(32).toString('hex');
-    const script = addressToScript(address);
+    const script = addressToScript(address, this.name);
     this.utxos.set(fakeTxid + ':0', { txid: fakeTxid, vout: 0, value: valueSats, script, address });
     this.txs.set(fakeTxid, {
       hex: '',

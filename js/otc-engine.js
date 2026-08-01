@@ -1,7 +1,7 @@
 /*
 	SPDX-License-Identifier: Apache-2.0
 	Copyright 2026 SpaceXpanse
-Fork-specific OTC swap engine for SpeXex.
+	Fork-specific OTC swap engine for the SpaceXpanse ROD wallet.
 
 	otc-engine.js — Phase 2 swap engine.
 	Namespace: window.rodOtc.engine
@@ -16,84 +16,52 @@ Fork-specific OTC swap engine for SpeXex.
 	var NOSTR = root.nostr;
 
 	/* ============ Config ============ */
-	var CFG_KEY = 'rodOtcEngineConfig';
+	var CFG_KEY = 'spexSwapV2Config';
 	var defaults = {
-		rodApiUrl: 'https://api.spacexpanse.org:1234',
-		altApiUrl: 'https://litecoinspace.org/api',
 		rpcUrl: '', rpcPort: '18080', rpcUser: '', rpcPass: '', rpcWallet: '',
 		relays: ['wss://relay.damus.io','wss://nos.lol','wss://relay.nostr.band'],
-		releaseBlocks: 120,
-		/* Refund delays in native blocks of each chain. Seller (the secret
-		   holder, who funds ROD first) must refund LATER in wall time than Buyer
-		   refunds the alt leg — otherwise the secret holder could reclaim ROD
-		   and still claim the alt coin. ROD ~30s blocks × 480 ≈ 4h. */
-		refundRodBlocks: 480,
-		altRefundBlocks: 24,
-		/* Confirmation-count acceptance gates */
-		rodConfirmations: 1,
-		altConfirmations: 1,
-		/* Per-alt-chain settings. Block counts are chosen so the refund window
-		   is the same WALL-CLOCK duration on every chain (~1 hour), because the
-		   protocol's safety margin is a time relationship, not a block count:
-		     LTC  2.5 min/block ×  24 ≈ 1h
-		     DOGE 1    min/block ×  60 ≈ 1h
-		   Confirmations follow the same logic. Litecoin's historical default of
-		   1 confirmation is ~2.5 minutes of work; Dogecoin blocks arrive 2.5x
-		   faster AND carry less independent security (its Scrypt hashrate is
-		   supplied almost entirely by Litecoin merge-miners), so 6 confirmations
-		   (~6 min) is the closer equivalent. Both are user-configurable, and
-		   both are bounded by the 1-hour refund window above. */
-		altChains: {
-			LTC: {
-				apiUrl: 'https://litecoinspace.org/api',
-				apiType: 'esplora',
-				refundBlocks: 24,
-				confirmations: 1
-			},
-			DOGE: {
-				apiUrl: 'https://api.blockcypher.com/v1/doge/main',
-				apiType: 'blockcypher',
-				refundBlocks: 60,
-				confirmations: 6
-			}
-		},
+		releaseBlocks: 30,
+		chains: {},
 		/* Automation re-drive interval (ms); tests may lower this */
 		tickMs: 30000
 	};
+	CHAINS.codes().forEach(function (code) {
+		var definition = CHAINS.getDefinition(code);
+		defaults.chains[code] = {
+			apiUrl: definition.apiUrl,
+			apiType: definition.apiType,
+			refundBlocks: {
+				asset: CHAINS.getRefundBlocks(code, 'asset'),
+				payment: CHAINS.getRefundBlocks(code, 'payment')
+			},
+			confirmations: definition.confirmations
+		};
+	});
 	engine.defaults = defaults;
 
-	function mergeAltChains(saved) {
+	function mergeChains(saved) {
 		var merged = {};
-		for (var code in defaults.altChains) {
-			if (defaults.altChains.hasOwnProperty(code)) {
-				merged[code] = $.extend({}, defaults.altChains[code]);
+		for (var code in defaults.chains) {
+			if (defaults.chains.hasOwnProperty(code)) {
+				merged[code] = $.extend({}, defaults.chains[code]);
 			}
 		}
 		if (saved && typeof saved === 'object') {
 			for (var savedCode in saved) {
-				if (saved.hasOwnProperty(savedCode) && saved[savedCode] && typeof saved[savedCode] === 'object') {
-					merged[savedCode] = $.extend(merged[savedCode] || {}, saved[savedCode]);
+				if (saved.hasOwnProperty(savedCode) && defaults.chains[savedCode] &&
+					saved[savedCode] && typeof saved[savedCode] === 'object') {
+					merged[savedCode] = $.extend(merged[savedCode], saved[savedCode]);
 				}
 			}
 		}
 		return merged;
 	}
 
-	/* Resolved settings for one alt chain.
-
-	   The flat altApiUrl / altRefundBlocks / altConfirmations keys predate
-	   multi-chain support and are still honoured, but ONLY for the default alt
-	   chain — they were written when "the alt leg" could only mean Litecoin, so
-	   applying them to Dogecoin would silently point it at a Litecoin API. */
-	engine.altChainConfig = function (cc, cfg) {
+	/* Every settlement chain uses the same profile shape. */
+	engine.chainConfig = function (cc, cfg) {
 		var c = cfg || engine.loadConfig();
-		var code = cc || SWAP.DEFAULT_ALT_CHAIN;
-		var resolved = $.extend({}, (c.altChains && c.altChains[code]) || defaults.altChains[code] || {});
-		if (code === SWAP.DEFAULT_ALT_CHAIN) {
-			if (c.altApiUrl) resolved.apiUrl = c.altApiUrl;
-			if (c.altRefundBlocks != null) resolved.refundBlocks = c.altRefundBlocks;
-			if (c.altConfirmations != null) resolved.confirmations = c.altConfirmations;
-		}
+		var code = String(cc || SWAP.DEFAULT_PAYMENT_CHAIN).toUpperCase();
+		var resolved = $.extend({}, (c.chains && c.chains[code]) || defaults.chains[code] || {});
 		return resolved;
 	};
 	/* Shallow merge + explicit array replace.
@@ -106,27 +74,16 @@ Fork-specific OTC swap engine for SpeXex.
 			if (!raw) return cfg;
 			var saved = JSON.parse(raw);
 			if (!saved || typeof saved !== 'object') return cfg;
-			/* Wallet API Settings used to copy every network into altChains,
-			   including wallet-only DGB. Remove only the exact DGB backend that
-			   shipped as the old default so upgrades inherit coin.js's current
-			   Digiexplorer/Esplora default; genuinely custom endpoints remain. */
-			var savedDgb = saved.altChains && saved.altChains.DGB;
-			if (savedDgb &&
-				savedDgb.apiUrl === 'https://api.blockchair.com/digibyte' &&
-				(!savedDgb.apiType || savedDgb.apiType === 'blockchair')) {
-				delete saved.altChains.DGB;
-				try { localStorage.setItem(CFG_KEY, JSON.stringify(saved)); } catch (migrationError) {}
-			}
 			$.extend(cfg, saved);
 			if (Object.prototype.hasOwnProperty.call(saved, 'relays')) {
 				cfg.relays = $.isArray(saved.relays) ? saved.relays.slice() : defaults.relays.slice();
 			} else {
 				cfg.relays = defaults.relays.slice();
 			}
-			/* $.extend is shallow, so a saved altChains map containing only the
+			/* $.extend is shallow, so a saved chains map containing only the
 			   chain the user edited would otherwise delete every other chain's
 			   settings. Merge per chain instead. */
-			cfg.altChains = mergeAltChains(saved.altChains);
+			cfg.chains = mergeChains(saved.chains);
 			return cfg;
 		} catch (e) {
 			cfg = $.extend({}, defaults);
@@ -149,15 +106,16 @@ Fork-specific OTC swap engine for SpeXex.
 	engine.applyApiConfig = function (cfg) {
 		var c = cfg || engine.loadConfig();
 		try {
-			var rod = $.trim(c.rodApiUrl || '');
+			var rodProfile = engine.chainConfig('ROD', c);
+			var rod = $.trim(rodProfile.apiUrl || '');
 			if (rod) {
 				rod = rod.replace(/\/+$/, '');
 				coinjs.networks.ROD.apiBase = rod;
 				coinjs.rodApi = rod;
 			}
 			for (var code in coinjs.networks) {
-				if (!coinjs.networks.hasOwnProperty(code) || code === 'ROD') continue;
-				var chainCfg = engine.altChainConfig(code, c);
+				if (!coinjs.networks.hasOwnProperty(code)) continue;
+				var chainCfg = engine.chainConfig(code, c);
 				var base = $.trim(chainCfg.apiUrl || '');
 				if (base) {
 					coinjs.networks[code].apiBase = base.replace(/\/+$/, '');
@@ -173,10 +131,26 @@ Fork-specific OTC swap engine for SpeXex.
 	/* ============ Wallet bridge ============ */
 	engine.getWalletIdentity = function () {
 		var wif = $('#walletKeys .privkey').val() || '';
-		var pub = $('#walletKeys .pubkey').val() || '';
-		var addr = $('#walletAddress').text() || '';
-		if (!wif || !pub) return null;
-		return { wif: wif, pubkey: pub, address: addr };
+		if (!wif) return null;
+		try {
+			/* ROD is the identity/control plane even when the wallet tab is
+			   currently showing LTC, DOGE, or another settlement network. The
+			   visible address therefore cannot be used as the trader identity.
+			   Re-derive the same private key under ROD here and keep the visible
+			   address only as diagnostic context. */
+			var rodMaterial = CHAINS.getWalletMaterialForChain(wif, 'ROD');
+			if (!rodMaterial || !rodMaterial.pubkey || !rodMaterial.address) return null;
+			return {
+				wif: wif,
+				pubkey: rodMaterial.pubkey,
+				address: rodMaterial.address,
+				rodAddress: rodMaterial.address,
+				activeAddress: ($('#walletAddress').text() || '').replace(/\s+/g, ''),
+				activeChain: coinjs.activeNetwork || 'ROD'
+			};
+		} catch (identityError) {
+			return null;
+		}
 	};
 	engine.walletPassword = function () {
 		var w = engine.getWalletIdentity();
@@ -200,7 +174,7 @@ Fork-specific OTC swap engine for SpeXex.
 		return master;
 	};
 
-	/* Version-agnostic BIP32 key identity: strips the 4 network version bytes
+	/* Chain-agnostic BIP32 key identity: strips the 4 network version bytes
 	   and compares depth/fingerprint/index/chaincode/key material only, so a
 	   ROD-encoded and an LTC-encoded xpub of the SAME key compare equal. */
 	engine.xpubKeyMaterial = function (extendedKey) {
@@ -219,7 +193,7 @@ Fork-specific OTC swap engine for SpeXex.
 
 	/* ============ API access ============ */
 	engine.rodGet = function (path) {
-		return $.getJSON(engine.loadConfig().rodApiUrl + path);
+		return $.getJSON(engine.chainConfig('ROD').apiUrl + path);
 	};
 	engine.getRodHeight = function () {
 		return engine.rodGet('/info').then(function (r) {
@@ -227,19 +201,20 @@ Fork-specific OTC swap engine for SpeXex.
 			return d.blocks || d.height || (d.info && d.info.blocks) || 0;
 		});
 	};
-	/* Chain tip for any non-ROD leg, via whichever explorer backend that chain
+	/* Chain tip for any non-ROD settlement chain, via its explorer backend
 	   is configured to use. */
-	engine.getAltHeight = function (cc) {
-		var chainCode = cc || SWAP.DEFAULT_ALT_CHAIN;
+	function getExplorerHeight(cc) {
+		var chainCode = cc;
 		var network = coinjs.networks[chainCode];
 		if (!network) return $.Deferred().reject('Unknown chain ' + chainCode).promise();
 		if (!coinjs.explorer || !coinjs.explorer.isSupported(network)) {
 			return $.Deferred().reject('No explorer backend for ' + chainCode).promise();
 		}
 		return coinjs.explorer.tipHeight(network);
-	};
+	}
 	engine.getChainHeight = function (cc) {
-		return cc === 'ROD' ? engine.getRodHeight() : engine.getAltHeight(cc);
+		var code = SWAP.normalizeChain(cc);
+		return code === 'ROD' ? engine.getRodHeight() : getExplorerHeight(code);
 	};
 	/**
 	 * Resolve stored RPC settings to a display endpoint (no network I/O).
@@ -459,31 +434,32 @@ Fork-specific OTC swap engine for SpeXex.
 		if (value._rawValue) {
 			return { ok: false, reason: 'name value is not valid JSON' };
 		}
-		var typeOk = (value.type === 'otc-order' || value.t === 'otc.offer' || value.type === 'otc.offer');
+		var typeOk = value.version === SWAP.PROTOCOL_VERSION && value.type === 'otc-order';
 		if (!typeOk) {
 			return { ok: false, reason: 'not an otc-order (type=' + (value.type || value.t || 'missing') + ')' };
 		}
-		/* Orders published before multi-chain support carry no pair field and
-		   are Litecoin by definition. Anything else must name a ROD/<alt> pair
-		   whose alt leg this build actually knows how to settle. */
-		var pair = value.pair || ('ROD/' + SWAP.DEFAULT_ALT_CHAIN);
+		var pair = value.pair || '';
 		var pairParts = String(pair).split('/');
-		var pairAltChain = pairParts.length === 2 && pairParts[0] === 'ROD' ? pairParts[1] : '';
-		if (!pairAltChain || pairAltChain === 'ROD' || !CHAINS.definitions[pairAltChain]) {
+		var pairAssetChain = pairParts.length === 2 ? pairParts[0] : '';
+		var pairPaymentChain = pairParts.length === 2 ? pairParts[1] : '';
+		if (!pairAssetChain || !pairPaymentChain || pairAssetChain === pairPaymentChain ||
+			!CHAINS.definitions[pairAssetChain] || !CHAINS.definitions[pairPaymentChain] ||
+			value.assetChain !== pairAssetChain || value.paymentChain !== pairPaymentChain) {
 			return { ok: false, reason: 'unsupported pair ' + pair };
 		}
-		var give = value.give != null ? value.give : value.rodAmount;
-		var want = value.want != null ? value.want : value.altAmount;
+		var give = value.give != null ? value.give : value.assetAmount;
+		var want = value.want != null ? value.want : value.paymentAmount;
 		if (!(parseFloat(give) > 0) || !(parseFloat(want) > 0)) {
 			return {
 				ok: false,
-				reason: 'incomplete order — need give/want (or rodAmount/altAmount). On-chain value only has: ' +
+				reason: 'incomplete order — need give/want (or assetAmount/paymentAmount). On-chain value only has: ' +
 					Object.keys(value).join(', ')
 			};
 		}
 		var offer = $.extend({}, value);
 		offer.pair = pair;
-		offer.altChain = pairAltChain;
+		offer.assetChain = pairAssetChain;
+		offer.paymentChain = pairPaymentChain;
 		offer.type = value.type || 'otc-order';
 		offer.give = give;
 		offer.want = want;
@@ -605,9 +581,7 @@ Fork-specific OTC swap engine for SpeXex.
 		if (engine.onRelayEventDebug) engine.onRelayEventDebug(message);
 	}
 	function otcKinds() {
-		var primary = (NOSTR && NOSTR.OTC_EVENT_KIND) || 7340;
-		var legacy = (NOSTR && NOSTR.LEGACY_OTC_EVENT_KIND) || 33440;
-		return primary === legacy ? [primary] : [primary, legacy];
+		return [(NOSTR && NOSTR.OTC_EVENT_KIND) || 7341];
 	}
 
 	engine.stopRelays = function () {
@@ -641,7 +615,7 @@ Fork-specific OTC swap engine for SpeXex.
 	};
 
 	/* ============ Nostr auto-negotiation ============ */
-	var SEEN_EVENT_IDS_KEY = 'rodOtcSeenEventIds';
+	var SEEN_EVENT_IDS_KEY = 'spexSwapV2SeenEventIds';
 	var SEEN_EVENT_IDS_LIMIT = 800;
 	var GLOBAL_SUB_LOOKBACK_SECONDS = 30;
 	var TRACKED_SWAP_SUB_LOOKBACK_SECONDS = 900;
@@ -1245,24 +1219,24 @@ Fork-specific OTC swap engine for SpeXex.
 	};
 
 	/* ============ Persistent sessions ============ */
-	var LIVE = 'rodOtcLive';
+	var LIVE = 'spexSwapV2Live';
 
 	/* Large hex blobs (raw tx hex for planned fundings and signed refund txns)
 	   are offloaded to individual localStorage keys so that one session with a
-	   big tx cannot blow the 5 MB quota for the whole rodOtcLive map.
-	   Each blob lives under  rodOtcHex_<swapId>_<parent>_<field>  and is
+	   big tx cannot blow the 5 MB quota for the whole v2 live-swap map.
+	   Each blob lives under  spexSwapV2Hex_<swapId>_<parent>_<field>  and is
 	   removed with the session when removeLive() is called.
 	   NOTE: txhex/signedHex are still held in memory on the live object;
 	   only the persisted copy has them stripped and re-merged on restore. */
-	var HEX_PREFIX = 'rodOtcHex_';
+	var HEX_PREFIX = 'spexSwapV2Hex_';
 	var HEX_PATHS = [
-		['plannedRodFunding', 'txhex'],
-		['plannedAltFunding', 'txhex'],
-		['rodRefund',         'signedHex'],
-		['altRefund',         'signedHex']
+		['plannedAssetFunding', 'txhex'],
+		['plannedPaymentFunding', 'txhex'],
+		['assetRefund',         'signedHex'],
+		['paymentRefund',         'signedHex']
 	];
-	var RECOVERY_VERSION = 1;
-	var RECOVERY_TYPE = 'rod-otc-recovery';
+	var RECOVERY_VERSION = 2;
+	var RECOVERY_TYPE = 'spex-swap-recovery';
 	var RECOVERY_MAX_BYTES = 8 * 1024 * 1024;
 	var RECOVERY_SENSITIVE_FIELDS = {
 		localChildPrivateKey: true,
@@ -1369,7 +1343,7 @@ Fork-specific OTC swap engine for SpeXex.
 		}
 		/* Automation locks describe one page run, not durable protocol state. */
 		delete sanitized.automation;
-		return migrateLegacyRoles(sanitized);
+		return sanitized;
 	}
 	function _validateImportedSession(swapId, session) {
 		if (!swapId || swapId.length > 256 || /[\u0000-\u001f]/.test(swapId) ||
@@ -1377,7 +1351,8 @@ Fork-specific OTC swap engine for SpeXex.
 			throw new Error('OTC recovery backup contains an invalid swap ID');
 		}
 		if (!_plainRecord(session) || String(session.swapId || '') !== swapId ||
-			!_plainRecord(session.terms) || (session.role !== 'seller' && session.role !== 'buyer')) {
+			!_plainRecord(session.terms) || session.terms.protocol !== SWAP.PROTOCOL_VERSION ||
+			(session.role !== 'seller' && session.role !== 'buyer')) {
 			throw new Error('OTC recovery backup contains an invalid session for ' + swapId);
 		}
 		for (var field in RECOVERY_SENSITIVE_FIELDS) {
@@ -1387,7 +1362,7 @@ Fork-specific OTC swap engine for SpeXex.
 		}
 		var sanitized = $.extend(true, {}, session);
 		delete sanitized.automation;
-		return migrateLegacyRoles(sanitized);
+		return sanitized;
 	}
 	function _collectHexBlobs(live) {
 		var blobs = {};
@@ -1454,7 +1429,7 @@ Fork-specific OTC swap engine for SpeXex.
 		return merged;
 	}
 
-	var TERMINAL_STATES = { COMPLETE: true, REFUNDED: true, PARTIALLY_SETTLED: true, ROD_REFUNDED: true, ALT_REFUNDED: true };
+	var TERMINAL_STATES = { COMPLETE: true, REFUNDED: true, PARTIALLY_SETTLED: true, ASSET_REFUNDED: true, PAYMENT_REFUNDED: true };
 	function isTerminalSession(s) {
 		return !!(s && (s.declined || TERMINAL_STATES[s.state]));
 	}
@@ -1490,54 +1465,15 @@ Fork-specific OTC swap engine for SpeXex.
 					/* Pass 2: keep only the current session */
 					var minimal = {}; minimal[sess.swapId] = c;
 					try { localStorage.setItem(LIVE, JSON.stringify(minimal)); } catch (e3) {
-						console.error('rodOtcLive: storage full even after pruning — session not persisted', e3);
+						console.error('spexSwapV2Live: storage full even after pruning — session not persisted', e3);
 					}
 				}
 			}
 		}
 	};
-	/* ---- Legacy role migration (alice/bob -> seller/buyer) ----
-	   Roles and two state names were persisted as 'alice'/'bob' and
-	   ALICE_ROD_FUNDED / BOB_ALT_FUNDED before the protocol adopted the
-	   economic role names. A session stored under the old vocabulary would
-	   otherwise fail every `role === 'seller'` branch, disappear from the
-	   automation entirely and — critically — never reach its refund monitor,
-	   stranding real funds. Normalising on read keeps those swaps visible and
-	   REFUNDABLE. The pre-signed refund transactions are stored as complete
-	   signed hex, so refunds remain valid regardless of the naming change. */
-	var LEGACY_ROLE = { alice: 'seller', bob: 'buyer' };
-	var LEGACY_STATE = { ALICE_ROD_FUNDED: 'SELLER_ROD_FUNDED', BOB_ALT_FUNDED: 'BUYER_ALT_FUNDED' };
-	var LEGACY_TERMS_KEYS = { aliceChildPubKey: 'sellerChildPubKey', bobChildPubKey: 'buyerChildPubKey' };
-	function migrateLegacyRoles(s) {
-		if (!s || typeof s !== 'object') return s;
-		var touched = false;
-		if (LEGACY_ROLE[s.role]) { s.role = LEGACY_ROLE[s.role]; touched = true; }
-		if (LEGACY_STATE[s.state]) { s.state = LEGACY_STATE[s.state]; touched = true; }
-		if (s.terms) {
-			for (var oldKey in LEGACY_TERMS_KEYS) {
-				if (Object.prototype.hasOwnProperty.call(s.terms, oldKey)) {
-					if (s.terms[LEGACY_TERMS_KEYS[oldKey]] == null) s.terms[LEGACY_TERMS_KEYS[oldKey]] = s.terms[oldKey];
-					delete s.terms[oldKey];
-					touched = true;
-				}
-			}
-		}
-		if ($.isArray(s.timeline)) {
-			for (var i = 0; i < s.timeline.length; i++) {
-				var entry = s.timeline[i];
-				if (entry && LEGACY_STATE[entry.state]) { entry.state = LEGACY_STATE[entry.state]; touched = true; }
-			}
-		}
-		if (touched) s._legacyRolesMigrated = true;
-		return s;
-	}
-	engine.migrateLegacyRoles = migrateLegacyRoles;
-
 	engine.loadLive = function () {
 		try {
-			var all = JSON.parse(localStorage.getItem(LIVE)) || {};
-			for (var id in all) { if (Object.prototype.hasOwnProperty.call(all, id)) migrateLegacyRoles(all[id]); }
-			return all;
+			return JSON.parse(localStorage.getItem(LIVE)) || {};
 		} catch (e) { return {}; }
 	};
 	engine.restoreLive = function (id) {
@@ -1654,11 +1590,11 @@ Fork-specific OTC swap engine for SpeXex.
 	};
 
 	/* ============ Trade history ============ */
-	var HK = 'rodOtcHistory';
+	var HK = 'spexSwapV2History';
 	engine.getHistory = function () { try { return JSON.parse(localStorage.getItem(HK)) || []; } catch (e) { return []; } };
 	engine.recordTrade = function (s) {
 		var h = engine.getHistory();
-		h.unshift({ swapId: s.swapId, orderId: s.orderId, role: s.role, state: s.state, pair: (s.terms && s.terms.pair) || ('ROD/' + SWAP.DEFAULT_ALT_CHAIN), altChain: (s.terms && s.terms.altChain) || SWAP.DEFAULT_ALT_CHAIN, rodAmount: s.terms.rodAmount, altAmount: s.terms.altAmount, rodFundingTxid: s.execution && s.execution.rodFunding && s.execution.rodFunding.txid || '', altFundingTxid: s.execution && s.execution.altFunding && s.execution.altFunding.txid || '', altClaimTxid: s.execution && s.execution.altClaim && s.execution.altClaim.txid || '', rodClaimTxid: s.execution && s.execution.rodClaim && s.execution.rodClaim.txid || '', completedAt: new Date().toISOString() });
+		h.unshift({ swapId: s.swapId, orderId: s.orderId, role: s.role, state: s.state, pair: s.terms.pair, assetChain: s.terms.assetChain, paymentChain: s.terms.paymentChain, assetAmount: s.terms.assetAmount, paymentAmount: s.terms.paymentAmount, assetFundingTxid: s.execution && s.execution.assetFunding && s.execution.assetFunding.txid || '', paymentFundingTxid: s.execution && s.execution.paymentFunding && s.execution.paymentFunding.txid || '', paymentClaimTxid: s.execution && s.execution.paymentClaim && s.execution.paymentClaim.txid || '', assetClaimTxid: s.execution && s.execution.assetClaim && s.execution.assetClaim.txid || '', completedAt: new Date().toISOString() });
 		if (h.length > 100) h = h.slice(0, 100);
 		localStorage.setItem(HK, JSON.stringify(h));
 	};
@@ -1677,14 +1613,14 @@ Fork-specific OTC swap engine for SpeXex.
 	   event's id matches the id named on-chain and its signature verifies under
 	   the key named on-chain, so the chain record pins exactly one immutable
 	   payload. A relay can withhold detail, but it cannot substitute, alter or
-	   invent an order. Kind 31340 is parameterised-replaceable so a re-publish
+	   invent an order. Kind 31341 is parameterised-replaceable so a re-publish
 	   supersedes cleanly under the same d-tag. */
 	engine.relayOrderDetail = {};        /* nostr event id -> { order, event } */
 	engine.onRelayOrderDetail = null;    /* UI hook, fired when detail arrives */
 	var ORDER_SUB_LOOKBACK_SECONDS = 604800;
 
 	function orderKindFilter() {
-		return [(NOSTR && NOSTR.ORDER_EVENT_KIND) || 31340];
+		return [(NOSTR && NOSTR.ORDER_EVENT_KIND) || 31341];
 	}
 
 	/* Publish order detail to the relays and return the anchor that must then be
@@ -1706,13 +1642,13 @@ Fork-specific OTC swap engine for SpeXex.
 		try { envelope = NOSTR.validateOrderEvent(ev); }
 		catch (e) {
 			/* Silently discard events that don't look like OTC orders at all
-			   (other apps use kind 31340; we share the namespace). Only log
+			   (other apps may use nearby application kinds). Only log
 			   when it superficially matches our envelope but fails auth or
 			   integrity checks, because that is meaningful. */
 			var isOurFormat = false;
 			try {
 				var parsed = JSON.parse(ev.content || '{}');
-				isOurFormat = (parsed.version === 1 && parsed.kind === 'otc-order');
+				isOurFormat = (parsed.version === SWAP.PROTOCOL_VERSION && parsed.kind === 'otc-order');
 			} catch (pe) { /* unparseable content — definitely not ours */ }
 			if (isOurFormat) {
 				debugRelay('reject order detail from ' + (source || 'relay') + ': ' + (e.message || e));
@@ -1770,7 +1706,7 @@ Fork-specific OTC swap engine for SpeXex.
 				var norm = engine.normalizeOffer(n, v);
 				if (norm.ok) {
 					offers.push(norm.offer);
-					reports.push({ name: n, ok: true, detail: 'ok · ' + norm.offer.side + ' ' + norm.offer.give + ' ROD / ' + norm.offer.want + ' ' + norm.offer.altChain });
+					reports.push({ name: n, ok: true, detail: 'ok · ' + norm.offer.side + ' ' + norm.offer.give + ' ' + norm.offer.assetChain + ' / ' + norm.offer.want + ' ' + norm.offer.paymentChain });
 				} else {
 					reports.push({ name: n, ok: false, detail: norm.reason || 'rejected' });
 				}
@@ -1852,7 +1788,7 @@ Fork-specific OTC swap engine for SpeXex.
 						reports.push({
 							name: n,
 							ok: true,
-							detail: 'ok · ' + norm.offer.side + ' ' + norm.offer.give + ' ROD / ' + norm.offer.want + ' ' + norm.offer.altChain
+							detail: 'ok · ' + norm.offer.side + ' ' + norm.offer.give + ' ' + norm.offer.assetChain + ' / ' + norm.offer.want + ' ' + norm.offer.paymentChain
 						});
 					} else {
 						reports.push({ name: n, ok: false, detail: norm.reason || 'rejected' });

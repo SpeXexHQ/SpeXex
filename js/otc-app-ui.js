@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: Apache-2.0
  * Copyright 2026 SpaceXpanse
- * Fork-specific OTC swap UI for SpeXex.
+ * Fork-specific OTC swap UI for the SpaceXpanse ROD wallet.
  */
 
 $(function () {
@@ -12,36 +12,29 @@ $(function () {
 	function esc(v) { return $('<span>').text(v == null ? '' : String(v)).html(); }
 	function short(id) { return id ? id.slice(0, 12) + '…' : '—'; }
 	function ts() { return new Date().toLocaleTimeString(); }
-	function rate(rod, alt) { var r = parseFloat(rod), l = parseFloat(alt); return (r > 0 && l > 0) ? (l / r).toFixed(8) : '—'; }
+	function rate(asset, payment) { var a = parseFloat(asset), p = parseFloat(payment); return (a > 0 && p > 0) ? (p / a).toFixed(8) : '—'; }
 	var cfg = ENGINE.loadConfig();
 
 	/* Only expose chains implemented by every OTC layer. Wallet-only networks
 	   must not enter a swap flow merely because they have an explorer driver. */
-	function altChainCodes() {
-		var codes = [];
-		for (var code in SWAP.ALT_CHAIN_FEES) {
-			if (SWAP.ALT_CHAIN_FEES.hasOwnProperty(code) &&
-				coinjs.networks[code] && CHAINS.definitions[code]) {
-				codes.push(code);
-			}
-		}
-		return codes.sort();
+	function chainCodes() {
+		return CHAINS.codes().filter(function (code) { return !!coinjs.networks[code]; });
 	}
 
-	function altChainOptionsHtml() {
-		var codes = altChainCodes(), html = [];
+	function chainOptionsHtml(selected) {
+		var codes = chainCodes(), html = [];
 		for (var i = 0; i < codes.length; i++) {
 			var network = coinjs.networks[codes[i]];
-			html.push('<option value="' + esc(codes[i]) + '">' + esc(network.name || codes[i]) + ' (' + esc(codes[i]) + ')</option>');
+			html.push('<option value="' + esc(codes[i]) + '"' + (codes[i] === selected ? ' selected' : '') + '>' + esc(network.name || codes[i]) + ' (' + esc(codes[i]) + ')</option>');
 		}
 		return html.join('');
 	}
 
-	function altChainSettingsHtml(currentCfg) {
-		var codes = altChainCodes(), html = [];
+	function chainSettingsHtml(currentCfg) {
+		var codes = chainCodes(), html = [];
 		for (var i = 0; i < codes.length; i++) {
 			var code = codes[i];
-			var chainCfg = ENGINE.altChainConfig(code, currentCfg);
+			var chainCfg = ENGINE.chainConfig(code, currentCfg);
 			var backends = [];
 			for (var driver in coinjs.explorer.drivers) {
 				if (coinjs.explorer.drivers.hasOwnProperty(driver)) {
@@ -50,9 +43,9 @@ $(function () {
 			}
 			html.push(
 				'<label style="margin-top:8px">' + esc(code) + ' API</label>' +
-				'<input id="cfgAltApi_' + esc(code) + '" class="form-control js-alt-api" data-chain="' + esc(code) + '" value="' + esc(chainCfg.apiUrl || '') + '">' +
+				'<input id="cfgChainApi_' + esc(code) + '" class="form-control js-chain-api" data-chain="' + esc(code) + '" value="' + esc(chainCfg.apiUrl || '') + '">' +
 				'<label style="margin-top:4px;font-weight:normal;font-size:11px">' + esc(code) + ' backend</label>' +
-				'<select id="cfgAltType_' + esc(code) + '" class="form-control js-alt-type" data-chain="' + esc(code) + '">' + backends.join('') + '</select>'
+				'<select id="cfgChainType_' + esc(code) + '" class="form-control js-chain-type" data-chain="' + esc(code) + '">' + backends.join('') + '</select>'
 			);
 		}
 		return html.join('');
@@ -60,8 +53,8 @@ $(function () {
 
 	/* ============ HTML ============ */
 	$root.html([
-		'<h2 id="otcTitle">ROD ↔ <span id="otcTitleAlt">' + esc(altChainCodes()[0] || 'LTC') + '</span> OTC Swap</h2>',
-		'<div class="otc-rod-warn"><span class="glyphicon glyphicon-info-sign"></span> OTC swaps use <b>ROD</b> for on-chain operations (order publishing, name registration, and settlement transactions). Ensure your ROD RPC wallet has sufficient balance to cover transaction fees.</div>',
+		'<h2 id="otcTitle"><span id="otcTitleAsset">ROD</span> ↔ <span id="otcTitlePayment">LTC</span> OTC Swap</h2>',
+		'<div class="otc-rod-warn"><span class="glyphicon glyphicon-info-sign"></span> <b>ROD is the control plane</b> for identity, reputation, offer ownership and order publishing. The selected pair provides settlement.</div>',
 		'<div id="otcWarn" class="alert alert-warning" style="display:none"><b>Wallet not loaded.</b> Open your wallet in the <a href="#" onclick="$(\'a[href=#wallet]\').tab(\'show\');return false">Wallet tab</a> first. Your wallet key is used for swap authentication and signing.</div>',
 		'<div id="otcWalletOk" class="alert alert-success" style="display:none"></div>',
 		'<div id="otcFlash" class="alert hidden"></div>',
@@ -85,7 +78,7 @@ $(function () {
 		'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap">',
 		'<h4 style="margin:0">ROD Orderbook</h4>',
 		'<div class="otc-book-controls">',
-		'<select id="otcBookChainFilter" class="form-control input-sm"><option value="">All chains</option></select>',
+		'<select id="otcBookChainFilter" class="form-control input-sm"><option value="">All pairs</option></select>',
 		'<label class="otc-auto"><input type="checkbox" id="otcBookAutoRefresh"> auto</label>',
 		'<small id="otcBookTime" class="text-muted"></small>',
 		'<button class="btn btn-default btn-xs" id="otcRefreshBook">Refresh</button>',
@@ -93,14 +86,14 @@ $(function () {
 		'</div>',
 		'<div class="otc-book-grid">',
 		'<div class="otc-book-col">',
-		'<div class="otc-book-head otc-book-head-ask"><span>Ask</span><small>sell ROD</small></div>',
-		'<table class="table otc-book-tbl"><thead><tr><th>Price</th><th class="otc-num">ROD</th><th class="otc-num">Lots</th></tr></thead><tbody id="otcAsks"></tbody></table>',
+		'<div class="otc-book-head otc-book-head-ask"><span>Ask</span><small>sell asset</small></div>',
+		'<table class="table otc-book-tbl"><thead><tr><th>Price</th><th class="otc-num js-asset-unit">ROD</th><th class="otc-num">Lots</th></tr></thead><tbody id="otcAsks"></tbody></table>',
 		'</div>',
 		'<div class="otc-book-mid">',
 		'<div class="otc-mid-card">',
 		'<div class="otc-mid-label">Current price</div>',
 		'<div id="otcMidPrice" class="otc-mid-value">—</div>',
-		'<div class="otc-mid-unit" id="otcMidPriceUnit">LTC per ROD</div>',
+		'<div class="otc-mid-unit" id="otcMidPriceUnit">Payment per asset</div>',
 		'<div class="otc-mid-note" id="otcMidPriceNote"></div>',
 		'<div class="otc-mid-sep"></div>',
 		'<div class="otc-mid-label">Last settled</div>',
@@ -108,8 +101,8 @@ $(function () {
 		'</div>',
 		'</div>',
 		'<div class="otc-book-col">',
-		'<div class="otc-book-head otc-book-head-bid"><span>Bid</span><small>buy ROD</small></div>',
-		'<table class="table otc-book-tbl"><thead><tr><th>Price</th><th class="otc-num">ROD</th><th class="otc-num">Lots</th></tr></thead><tbody id="otcBids"></tbody></table>',
+		'<div class="otc-book-head otc-book-head-bid"><span>Bid</span><small>buy asset</small></div>',
+		'<table class="table otc-book-tbl"><thead><tr><th>Price</th><th class="otc-num js-asset-unit">ROD</th><th class="otc-num">Lots</th></tr></thead><tbody id="otcBids"></tbody></table>',
 		'</div>',
 		'</div>',
 		/* Expanded lots for the selected price. OTC is lot-picking, not
@@ -125,7 +118,7 @@ $(function () {
 		'</div>',
 		'</div>',
 		'<div id="otcLotSummary" class="otc-lots-summary"></div>',
-		'<table class="table otc-session-table otc-lots-tbl"><thead><tr><th>Counterparty</th><th class="otc-num">ROD</th><th class="otc-num">Counter</th><th>Settlement</th><th></th></tr></thead><tbody id="otcBookDetailBody"></tbody></table>',
+		'<table class="table otc-session-table otc-lots-tbl"><thead><tr><th>Counterparty</th><th class="otc-num js-asset-unit">ROD</th><th class="otc-num js-payment-unit">LTC</th><th>Settlement</th><th></th></tr></thead><tbody id="otcBookDetailBody"></tbody></table>',
 		'</div>',
 		/* Own orders: hidden from the takeable book, managed here */
 		'<div style="margin-top:14px">',
@@ -133,7 +126,7 @@ $(function () {
 		'<h5 style="margin:0">My orders <span class="badge" id="otcMyOrdersCount">0</span></h5>',
 		'<small class="text-muted">Your own orders are hidden from the book above</small>',
 		'</div>',
-		'<table class="table otc-session-table"><thead><tr><th>Order</th><th>Side</th><th>ROD</th><th>Counter</th><th>Status</th><th></th></tr></thead><tbody id="otcMyOrdersBody"></tbody></table>',
+		'<table class="table otc-session-table"><thead><tr><th>Order</th><th>Side</th><th>Asset</th><th>Counter</th><th>Status</th><th></th></tr></thead><tbody id="otcMyOrdersBody"></tbody></table>',
 		'</div>',
 		'<div style="margin-top:10px">',
 		'<label style="font-size:12px">Orderbook sources</label>',
@@ -169,11 +162,12 @@ $(function () {
 		'<h4>Create order</h4>',
 		'<p class="text-muted" style="font-size:12px;margin-top:0">Post an open <b>order</b> with your terms. To <b>take</b> an existing order and start a swap, use the <b>Dashboard</b> tab.</p>',
 		'<div class="row"><div class="col-md-6">',
-		'<label>Counter chain</label><select id="nsAltChain" class="form-control">' + altChainOptionsHtml() + '</select>',
+		'<label>Asset chain</label><select id="nsAssetChain" class="form-control">' + chainOptionsHtml('ROD') + '</select>',
+		'<label>Payment chain</label><select id="nsPaymentChain" class="form-control">' + chainOptionsHtml('LTC') + '</select>',
 		'<p id="nsAltHint" class="text-muted" style="font-size:11px;margin:4px 0 0"></p>',
-		'<label>Your role</label><select id="nsRole" class="form-control"><option value="seller">I sell ROD for <span class="js-alt-unit">LTC</span></option><option value="buyer">I buy ROD with <span class="js-alt-unit">LTC</span></option></select>',
-		'<label>ROD amount</label><input id="nsRod" class="form-control" value="1000.00000000">',
-		'<label><span class="js-alt-unit">LTC</span> amount</label><input id="nsAlt" class="form-control" value="5.00000000">',
+		'<label>Your role</label><select id="nsRole" class="form-control"><option value="seller">I sell the asset coin</option><option value="buyer">I buy the asset coin</option></select>',
+		'<label><span class="js-asset-unit">ROD</span> amount</label><input id="nsRod" class="form-control" value="1000.00000000">',
+		'<label><span class="js-payment-unit">LTC</span> amount</label><input id="nsAlt" class="form-control" value="5.00000000">',
 		'<label>Release ROD height <small id="nsHeightHint" class="text-muted"></small></label><input id="nsRelease" class="form-control" value="" readonly>',
 		'<input id="nsOrderName" type="hidden" value="">',
 		'<input id="nsPeer" type="hidden" value="">',
@@ -214,8 +208,8 @@ $(function () {
 		'<div id="otcExecStatus" style="font-size:12px;margin-top:8px"></div>',
 		'<div class="btn-toolbar" style="margin-top:10px">',
 		'<button class="btn btn-primary btn-sm otcExecBtn" data-action="accept-offer">Accept swap</button> ',
-		'<button class="btn btn-success btn-sm otcExecBtn" data-action="claim-alt">Accept: claim <span class="js-alt-unit">LTC</span></button> ',
-		'<button class="btn btn-success btn-sm otcExecBtn" data-action="claim-rod">Accept: claim ROD</button> ',
+		'<button class="btn btn-success btn-sm otcExecBtn" data-action="claim-payment">Accept: claim <span class="js-payment-unit">LTC</span></button> ',
+		'<button class="btn btn-success btn-sm otcExecBtn" data-action="claim-asset">Accept: claim <span class="js-asset-unit">ROD</span></button> ',
 		'<button class="btn btn-warning btn-sm otcExecBtn" data-action="attempt-refund">Attempt refund</button> ',
 		'<button class="btn btn-default btn-sm otcExecBtn" data-action="refresh">Refresh confirmations</button>',
 		'</div>',
@@ -225,7 +219,7 @@ $(function () {
 
 		/* ============ HISTORY ============ */
 		'<div class="tab-pane" id="otcHist">',
-		'<div class="otc-panel otc-hist-panel"><h4>Trade history</h4><table class="table otc-session-table otc-hist-table"><thead><tr><th>Date</th><th>ID</th><th>Role</th><th>ROD</th><th>Counter</th><th>State</th></tr></thead><tbody id="otcHistBody"></tbody></table><button class="btn btn-default btn-xs" id="otcClearHist">Clear</button></div></div>',
+		'<div class="otc-panel otc-hist-panel"><h4>Trade history</h4><table class="table otc-session-table otc-hist-table"><thead><tr><th>Date</th><th>ID</th><th>Role</th><th>Asset</th><th>Counter</th><th>State</th></tr></thead><tbody id="otcHistBody"></tbody></table><button class="btn btn-default btn-xs" id="otcClearHist">Clear</button></div></div>',
 
 		/* ============ SETTINGS ============ */
 		'<div class="tab-pane" id="otcCfg">',
@@ -414,11 +408,11 @@ $(function () {
 	var allOffers = [], currentRodHeight = 0;
 	/* The economics of an offer ARE the offer. They are read from the ROD name
 	   record and never from relay detail, so a relay cannot restate a price,
-	   a size, a side or a counter chain even for an order it legitimately
+	   a size, a side or a settlement pair even for an order it legitimately
 	   carries the detail for. */
 	var CHAIN_ONLY_ORDER_FIELDS = {
-		give: true, want: true, rodAmount: true, altAmount: true,
-		side: true, pair: true, altChain: true, releaseRodHeight: true,
+		give: true, want: true, assetAmount: true, paymentAmount: true,
+		side: true, pair: true, assetChain: true, paymentChain: true, releaseRodHeight: true,
 		orderId: true, nostrEventId: true, nostrPubkey: true
 	};
 	function orderCreatedAt(order) {
@@ -435,8 +429,8 @@ $(function () {
 
 	/* ---- Settlement clock ----
 	   releaseRodHeight is not decoration: it is when the counter-leg claim
-	   unlocks, and taking an order sets your own ROD refund at
-	   (current height + refundRodBlocks). Two numbers follow from that and both
+	   unlocks, and taking an order sets your own asset refund at
+	   (current height + refundAssetBlocks). Two numbers follow from that and both
 	   matter before committing coin:
 
 	     wait  = release - now          how long funds sit before settlement
@@ -461,24 +455,13 @@ $(function () {
 	function settlementClock(order, chainHeight) {
 		var release = parseInt(order && order.releaseRodHeight, 10) || 0;
 		if (!release || !chainHeight) return null;
-		var cfg = ENGINE.loadConfig() || {};
-		var refundBlocks = parseInt(cfg.refundRodBlocks, 10) || 480;
 		var secs = rodBlockSeconds();
 		var wait = release - chainHeight;
-		var slack = (chainHeight + refundBlocks) - release;
-		/* Below ~15% of the refund window there is very little room between the
-		   claim unlocking and the refund unlocking. */
-		var slackRatio = slack / refundBlocks;
-		var level = 'ok';
-		if (slack <= 0) level = 'invalid';
-		else if (slackRatio < 0.15) level = 'tight';
-		else if (slackRatio < 0.35) level = 'fair';
 		return {
 			waitBlocks: wait,
 			waitLabel: wait <= 0 ? 'settles immediately' : 'settles in ' + humanDuration(wait * secs),
-			slackBlocks: slack,
-			slackLabel: humanDuration(slack * secs) + ' of refund slack',
-			level: level
+			slackLabel: 'ROD control height ' + release,
+			level: 'ok'
 		};
 	}
 	function settlementBadge(clock) {
@@ -545,8 +528,8 @@ $(function () {
 			var blocksLeft = (o._dueBlock && chainHeight) ? (o._dueBlock - chainHeight) : null;
 			return '<tr><td><code style="font-size:10px">' + esc(short(o._name || o.orderId || '—')) + '</code></td>' +
 				'<td>' + esc(o.side || '—') + '</td>' +
-				'<td>' + esc(o.give || o.rodAmount || '—') + ' ROD</td>' +
-				'<td>' + esc(o.want || o.altAmount || '—') + ' ' + esc(o.altChain || SWAP.DEFAULT_ALT_CHAIN) + '</td>' +
+				'<td>' + esc(o.give || o.assetAmount || '—') + ' ' + esc(o.assetChain || SWAP.DEFAULT_ASSET_CHAIN) + '</td>' +
+				'<td>' + esc(o.want || o.paymentAmount || '—') + ' ' + esc(o.paymentChain || SWAP.DEFAULT_PAYMENT_CHAIN) + '</td>' +
 				'<td>' + status + (blocksLeft != null && blocksLeft > 0 ? ' <span class="text-muted" style="font-size:10px">' + esc(blocksLeft) + ' blk left</span>' : '') + '</td>' +
 				'<td></td></tr>';
 		}).join(''));
@@ -571,7 +554,7 @@ $(function () {
 			   Two rules, both deliberate:
 
 			   1. The TRADABLE TERMS are the offer, so they come from the chain
-			      and nothing else. price, size, side, pair and counter chain are
+			      and nothing else. price, size, side and settlement pair are
 			      never taken from, nor overwritten by, relay detail — an order
 			      whose economics lived off-chain would not really be listed in
 			      the name DB at all. (normalizeOffer already rejects a record
@@ -623,23 +606,25 @@ $(function () {
 			});
 			/* Chain filter */
 			var chainFilter = $('#otcBookChainFilter').val() || '';
-			if (chainFilter) activeOffers = activeOffers.filter(function (o) { return (o.altChain || SWAP.DEFAULT_ALT_CHAIN) === chainFilter; });
+			if (chainFilter) activeOffers = activeOffers.filter(function (o) { return o.pair === chainFilter; });
 			allOffers = activeOffers;
 			renderMyOrders(ownOffers, chainHeight);
 			/* Group by price for ask/bid */
 			var asks = {}, bids = {};
 			activeOffers.forEach(function (o) {
-				var rod = parseFloat(o.give || o.rodAmount || 0), alt = parseFloat(o.want || o.altAmount || 0);
+				var rod = parseFloat(o.give || o.assetAmount || 0), alt = parseFloat(o.want || o.paymentAmount || 0);
 				if (rod <= 0 || alt <= 0) return;
 				/* Key on the COUNTER CHAIN as well as the price. "5.0" DOGE per
-				   ROD and "5.0" LTC per ROD are unrelated prices for unrelated
+				   ROD and "5.0" Payment per asset are unrelated prices for unrelated
 				   assets; merging them would sum their volumes into one row and
 				   let a user take a swap in an asset they did not choose. */
-				var chain = o.altChain || SWAP.DEFAULT_ALT_CHAIN;
+				var asset = o.assetChain || SWAP.DEFAULT_ASSET_CHAIN;
+				var chain = o.paymentChain || SWAP.DEFAULT_PAYMENT_CHAIN;
+				var pair = asset + '/' + chain;
 				var price = (alt / rod).toFixed(8);
-				var key = chain + '@' + price;
+				var key = pair + '@' + price;
 				var side = (o.side === 'buy') ? bids : asks;
-				if (!side[key]) side[key] = { vol: 0, offers: [], price: price, chain: chain };
+				if (!side[key]) side[key] = { vol: 0, offers: [], price: price, asset: asset, chain: chain, pair: pair };
 				side[key].vol += rod;
 				side[key].offers.push(o);
 			});
@@ -649,12 +634,13 @@ $(function () {
 			   produces a number that describes no tradable market at all — the
 			   two legs are unrelated assets. Quote the chain the user is
 			   actually looking at and label it. */
-			var quoteChain = $('#otcBookChainFilter').val() || selectedAltChain();
+			var quotePair = $('#otcBookChainFilter').val() || (selectedAssetChain() + '/' + selectedPaymentChain());
+			var quoteParts = quotePair.split('/'), quoteAsset = quoteParts[0], quoteChain = quoteParts[1];
 			var priceList = function (book) {
 				var out = [];
 				for (var k in book) {
 					if (!book.hasOwnProperty(k)) continue;
-					if (book[k].chain !== quoteChain) continue;
+					if (book[k].pair !== quotePair) continue;
 					out.push(Number(book[k].price));
 				}
 				return out;
@@ -672,11 +658,11 @@ $(function () {
 				mid = bidPrices[0].toFixed(8);
 				midNote = 'best bid only — no asks';
 			} else {
-				midNote = 'no ' + quoteChain + ' orders';
+				midNote = 'no ' + quotePair + ' orders';
 			}
 			$('#otcMidPrice').text(mid);
 			$('#otcMidPriceNote').text(midNote);
-			$('#otcMidPriceUnit').text(quoteChain + ' per ROD');
+			$('#otcMidPriceUnit').text(quoteChain + ' per ' + quoteAsset);
 			renderLastTraded();
 			var scanned = (scanResult && scanResult.scanned != null) ? scanResult.scanned : reports.length;
 			$('#otcBookTime').text(
@@ -691,7 +677,7 @@ $(function () {
 			if (selectedPriceRow) {
 				var $sel = $('.otc-price-row').filter(function () {
 					return String($(this).data('price')) === selectedPriceRow.price &&
-						String($(this).data('chain')) === selectedPriceRow.chain &&
+						String($(this).data('pair')) === selectedPriceRow.pair &&
 						String($(this).data('side')) === selectedPriceRow.side;
 				});
 				if ($sel.length) {
@@ -745,16 +731,16 @@ $(function () {
 			if (grouped.hasOwnProperty(key)) entries.push(grouped[key]);
 		}
 		entries.sort(function (a, b) {
-			if (a.chain !== b.chain) return a.chain < b.chain ? -1 : 1;
+			if (a.pair !== b.pair) return a.pair < b.pair ? -1 : 1;
 			return side === 'ask' ? (a.price - b.price) : (b.price - a.price);
 		});
 		var maxVol = 0;
 		entries.forEach(function (g) { if (g.vol > maxVol) maxVol = g.vol; });
 		var rows = entries.map(function (g) {
 			var pct = maxVol > 0 ? Math.max(4, Math.round((g.vol / maxVol) * 100)) : 0;
-			return '<tr class="otc-price-row otc-' + side + '-row" data-price="' + esc(g.price) + '" data-chain="' + esc(g.chain) + '" data-side="' + side + '">' +
+			return '<tr class="otc-price-row otc-' + side + '-row" data-price="' + esc(g.price) + '" data-chain="' + esc(g.chain) + '" data-pair="' + esc(g.pair) + '" data-side="' + side + '">' +
 				'<td><span class="otc-depth" style="width:' + pct + '%"></span>' +
-				'<span class="otc-price">' + esc(g.price) + '</span><span class="otc-chaintag">' + esc(g.chain) + '</span></td>' +
+				'<span class="otc-price">' + esc(g.price) + '</span><span class="otc-chaintag">' + esc(g.pair) + '</span></td>' +
 				'<td class="otc-num">' + g.vol.toFixed(2) + '</td>' +
 				'<td class="otc-num">' + g.offers.length + '</td></tr>';
 		});
@@ -766,15 +752,17 @@ $(function () {
 	   book otherwise has no reference point at all: a price is only meaningful
 	   against something that actually traded. */
 	function renderLastTraded() {
-		var quoteChain = $('#otcBookChainFilter').val() || selectedAltChain();
+		var quotePair = $('#otcBookChainFilter').val() || (selectedAssetChain() + '/' + selectedPaymentChain());
+		var quoteParts = quotePair.split('/');
+		var quoteChain = quoteParts.length === 2 ? quoteParts[1] : '';
 		var history = [];
 		try { history = ENGINE.getHistory() || []; } catch (e) { history = []; }
 		for (var i = 0; i < history.length; i++) {
 			var h = history[i];
 			if (!h || h.state !== 'COMPLETE') continue;
-			var chain = h.altChain || (h.pair ? String(h.pair).split('/')[1] : '') || SWAP.DEFAULT_ALT_CHAIN;
-			if (chain !== quoteChain) continue;
-			var rod = parseFloat(h.rodAmount || 0), alt = parseFloat(h.altAmount || h.ltcAmount || 0);
+			var pair = h.pair || ((h.assetChain || SWAP.DEFAULT_ASSET_CHAIN) + '/' + (h.paymentChain || SWAP.DEFAULT_PAYMENT_CHAIN));
+			if (pair !== quotePair) continue;
+			var rod = parseFloat(h.assetAmount || 0), alt = parseFloat(h.paymentAmount || 0);
 			if (!(rod > 0 && alt > 0)) continue;
 			$('#otcLastTraded').html(esc((alt / rod).toFixed(8)) + ' <span style="font-size:10px;color:#7fa6ba">' + esc(quoteChain) + '</span>');
 			return;
@@ -797,13 +785,13 @@ $(function () {
 	/* Populate the chain filter from the chains this build can actually settle,
 	   so the book can never offer a filter for an unsupported asset. */
 	(function populateChainFilter() {
-		var codes = [];
-		for (var code in CHAINS.definitions) {
-			if (Object.prototype.hasOwnProperty.call(CHAINS.definitions, code) && code !== 'ROD') codes.push(code);
-		}
-		codes.sort();
+		var codes = chainCodes();
 		var $sel = $('#otcBookChainFilter');
-		codes.forEach(function (c) { $sel.append('<option value="' + esc(c) + '">' + esc(c) + '</option>'); });
+		codes.forEach(function (asset) {
+			codes.forEach(function (payment) {
+				if (asset !== payment) $sel.append('<option value="' + esc(asset + '/' + payment) + '">' + esc(asset + '/' + payment) + '</option>');
+			});
+		});
 	})();
 	$(document).on('change', '#otcBookChainFilter', refreshBook);
 
@@ -840,17 +828,18 @@ $(function () {
 
 	function renderLotDetail() {
 		if (!selectedPriceRow) return;
-		var price = selectedPriceRow.price, side = selectedPriceRow.side, chainCode = selectedPriceRow.chain;
+		var price = selectedPriceRow.price, side = selectedPriceRow.side, pair = selectedPriceRow.pair;
+		var pairParts = pair.split('/'), assetCode = pairParts[0], chainCode = pairParts[1];
 		var matching = allOffers.filter(function (o) {
-			var rod = parseFloat(o.give || o.rodAmount || 0), alt = parseFloat(o.want || o.altAmount || 0);
+			var rod = parseFloat(o.give || o.assetAmount || 0), alt = parseFloat(o.want || o.paymentAmount || 0);
 			if (!(rod > 0 && alt > 0)) return false;
-			if ((o.altChain || SWAP.DEFAULT_ALT_CHAIN) !== chainCode) return false;
+			if (o.pair !== pair) return false;
 			return (alt / rod).toFixed(8) === price;
 		});
 
 		var wanted = parseFloat($('#otcLotAmount').val());
 		var hasWanted = isFinite(wanted) && wanted > 0;
-		matching.forEach(function (o) { o._rodSize = parseFloat(o.give || o.rodAmount || 0); });
+		matching.forEach(function (o) { o._rodSize = parseFloat(o.give || o.assetAmount || 0); });
 		matching.sort(function (a, b) {
 			if (hasWanted) {
 				var aFit = a._rodSize >= wanted, bFit = b._rodSize >= wanted;
@@ -861,7 +850,7 @@ $(function () {
 			return b._rodSize - a._rodSize;
 		});
 
-		$('#otcBookDetailTitle').text((side === 'ask' ? 'Sell' : 'Buy') + ' lots at ' + price + ' ' + chainCode + ' per ROD');
+		$('#otcBookDetailTitle').text((side === 'ask' ? 'Sell' : 'Buy') + ' lots at ' + price + ' ' + chainCode + ' per ' + assetCode);
 
 		var actionable = function (o) { return !!(o.sellerSwapXpub || o.buyerSwapXpub); };
 		var fitting = (hasWanted ? matching.filter(function (o) { return o._rodSize >= wanted; }) : matching.slice())
@@ -869,10 +858,10 @@ $(function () {
 		var totalRod = matching.reduce(function (sum, o) { return sum + o._rodSize; }, 0);
 		if (hasWanted) {
 			$('#otcLotSummary').html(fitting.length
-				? esc(fitting.length) + ' of ' + esc(matching.length) + ' lot(s) can fill ' + esc(wanted) + ' ROD · smallest sufficient is <b>' + esc(fitting[0]._rodSize) + ' ROD</b> (costs ' + esc((fitting[0]._rodSize * parseFloat(price)).toFixed(8)) + ' ' + esc(chainCode) + ')'
-				: '<span style="color:#f0ad4e">No single lot covers ' + esc(wanted) + ' ROD. Largest here is ' + esc(matching.length ? matching[0]._rodSize : 0) + ' ROD — OTC lots are taken whole.</span>');
+				? esc(fitting.length) + ' of ' + esc(matching.length) + ' lot(s) can fill ' + esc(wanted) + ' ' + esc(assetCode) + ' · smallest sufficient is <b>' + esc(fitting[0]._rodSize) + ' ' + esc(assetCode) + '</b> (costs ' + esc((fitting[0]._rodSize * parseFloat(price)).toFixed(8)) + ' ' + esc(chainCode) + ')'
+				: '<span style="color:#f0ad4e">No single lot covers ' + esc(wanted) + ' ' + esc(assetCode) + '. Largest here is ' + esc(matching.length ? matching[0]._rodSize : 0) + ' ' + esc(assetCode) + ' — OTC lots are taken whole.</span>');
 		} else {
-			$('#otcLotSummary').html(esc(matching.length) + ' lot(s) · ' + esc(totalRod.toFixed(2)) + ' ROD total at this price');
+			$('#otcLotSummary').html(esc(matching.length) + ' lot(s) · ' + esc(totalRod.toFixed(2)) + ' ' + esc(assetCode) + ' total at this price');
 		}
 
 		$('#otcBookDetailBody').html(matching.map(function (o) {
@@ -906,17 +895,18 @@ $(function () {
 				'<td><div><code style="font-size:10px">' + esc(short(counterparty)) + '</code>' + detailBadge + '</div>' +
 				created +
 				(xpub ? '<div class="text-muted" style="font-size:10px">xpub <code style="font-size:10px">' + esc(short(xpub)) + '</code></div>' : '') + '</td>' +
-				'<td class="otc-num"><b>' + esc(o.give || o.rodAmount) + '</b></td>' +
-				'<td class="otc-num">' + esc(o.want || o.altAmount) + ' <span style="font-size:10px;color:#7fa6ba">' + esc(o.altChain || SWAP.DEFAULT_ALT_CHAIN) + '</span></td>' +
+				'<td class="otc-num"><b>' + esc(o.give || o.assetAmount) + '</b></td>' +
+				'<td class="otc-num">' + esc(o.want || o.paymentAmount) + ' <span style="font-size:10px;color:#7fa6ba">' + esc(o.paymentChain || SWAP.DEFAULT_PAYMENT_CHAIN) + '</span></td>' +
 				'<td>' + (clock
 					? settlementBadge(clock) + '<div class="text-muted" style="font-size:10px;margin-top:2px">block ' + esc(o._dueBlock) + ' · ' + esc(clock.slackLabel) + '</div>'
 					: '<span class="otc-clock otc-clock-warn" title="This record states no release height, so there is no settlement window to check.">no window</span>') +
 				(blockedReason ? '<div style="font-size:10px;color:#f0ad4e;margin-top:2px">Not takeable — ' + esc(blockedReason) + '</div>' : '') + '</td>' +
 				'<td><button class="btn btn-xs btn-primary otcTakeOffer"' + (takeable ? '' : ' disabled') +
-					' data-rod="' + esc(o.give || o.rodAmount) + '" data-alt="' + esc(o.want || o.altAmount) +
-					'" data-chain="' + esc(o.altChain || SWAP.DEFAULT_ALT_CHAIN) + '" data-peer="' + esc(o.seller || o.buyer || '') +
+					' data-rod="' + esc(o.give || o.assetAmount) + '" data-alt="' + esc(o.want || o.paymentAmount) +
+					'" data-asset-chain="' + esc(o.assetChain || SWAP.DEFAULT_ASSET_CHAIN) +
+					'" data-chain="' + esc(o.paymentChain || SWAP.DEFAULT_PAYMENT_CHAIN) + '" data-peer="' + esc(o.seller || o.buyer || '') +
 					'" data-xpub="' + esc(xpub) + '" data-release="' + esc(o.releaseRodHeight || '') +
-					'" data-peer-payout="' + esc(o.sellerAltPayoutAddress || o.buyerRodPayoutAddress || '') +
+					'" data-peer-payout="' + esc(o.sellerPaymentPayoutAddress || o.buyerAssetPayoutAddress || '') +
 					'" data-side="' + esc(side) + '">Take</button></td></tr>';
 		}).join(''));
 		$('#otcBookDetail').show();
@@ -927,26 +917,36 @@ $(function () {
 		selectedPriceRow = {
 			price: String($(this).data('price')),
 			side: $(this).data('side'),
-			chain: String($(this).data('chain') || SWAP.DEFAULT_ALT_CHAIN)
+			chain: String($(this).data('chain') || SWAP.DEFAULT_PAYMENT_CHAIN),
+			pair: String($(this).data('pair') || (SWAP.DEFAULT_ASSET_CHAIN + '/' + SWAP.DEFAULT_PAYMENT_CHAIN))
 		};
 		renderLotDetail();
 	});
 	$(document).on('input', '#otcLotAmount', renderLotDetail);
 	$(document).on('click', '#otcLotAmountClear', function () { $('#otcLotAmount').val(''); renderLotDetail(); });
 
-	/* Retitle every alt-chain-dependent label when the counter chain changes. */
-	function refreshAltChainLabels() {
-		var code = selectedAltChain();
-		$('.js-alt-unit').text(code);
-		$('#nsAltHint').text(coinjs.networks[code] ? (coinjs.networks[code].name + ' · ' + (CHAINS.supportsSegwit(code) ? 'SegWit available' : 'legacy P2SH only, no SegWit')) : '');
-		/* Update the OTC Swap title to reflect current pair */
-		$('#otcTitleAlt').text(code);
+	function refreshChainLabels() {
+		var asset = selectedAssetChain(), payment = selectedPaymentChain();
+		$('.js-asset-unit').text(asset);
+		$('.js-payment-unit').text(payment);
+		$('#nsAltHint').text(coinjs.networks[payment] ? (coinjs.networks[payment].name + ' · ' + (CHAINS.supportsSegwit(payment) ? 'SegWit available' : 'legacy P2SH only, no SegWit')) : '');
+		$('#otcTitleAsset').text(asset);
+		$('#otcTitlePayment').text(payment);
 	}
-	$(document).on('change', '#nsAltChain', refreshAltChainLabels);
+	$(document).on('change', '#nsAssetChain, #nsPaymentChain', function () {
+		if (selectedAssetChain() === selectedPaymentChain()) {
+			var replacement = chainCodes().filter(function (code) { return code !== selectedAssetChain(); })[0];
+			if (replacement) $('#nsPaymentChain').val(replacement);
+		}
+		refreshChainLabels();
+	});
 	/* Chain filter also updates the title to reflect the filtered pair */
 	$(document).on('change', '#otcBookChainFilter', function () {
-		var chain = $(this).val();
-		$('#otcTitleAlt').text(chain || selectedAltChain());
+		var pair = $(this).val();
+		if (!pair) return refreshChainLabels();
+		var parts = pair.split('/');
+		$('#otcTitleAsset').text(parts[0]);
+		$('#otcTitlePayment').text(parts[1]);
 	});
 
 	/* Take offer → fill counterparty fields and immediately start the swap */
@@ -962,12 +962,14 @@ $(function () {
 
 	function startTakeOffer($b) {
 		nsPrefillFromOrder = true;
-		/* Set the counter chain before anything else: fees, dust limits, refund
-		   block counts and the payout address all derive from it. */
-		var offerChain = String($b.data('chain') || SWAP.DEFAULT_ALT_CHAIN);
-		if ($('#nsAltChain option[value="' + offerChain + '"]').length) {
-			$('#nsAltChain').val(offerChain);
-			refreshAltChainLabels();
+		/* Set both settlement roles before anything else: fees, dust limits,
+		   refund block counts and payout addresses all derive from them. */
+		var offerChain = String($b.data('chain') || SWAP.DEFAULT_PAYMENT_CHAIN);
+		var offerAssetChain = String($b.data('asset-chain') || SWAP.DEFAULT_ASSET_CHAIN);
+		if ($('#nsAssetChain option[value="' + offerAssetChain + '"]').length) $('#nsAssetChain').val(offerAssetChain);
+		if ($('#nsPaymentChain option[value="' + offerChain + '"]').length) {
+			$('#nsPaymentChain').val(offerChain);
+			refreshChainLabels();
 		}
 		$('#nsRod').val($b.data('rod'));
 		$('#nsAlt').val($b.data('alt'));
@@ -1080,7 +1082,7 @@ $(function () {
 			return '<div class="otc-swap-card" data-id="' + esc(id) + '">' +
 				'<span class="label label-' + cls + '">' + esc(s.state) + '</span> ' +
 				'<code>' + esc(short(id)) + '</code> · ' + esc(s.role === 'seller' ? 'Seller' : 'Buyer') +
-				' · ' + esc(s.terms.rodAmount) + ' ROD / ' + esc(s.terms.altAmount) + ' ' + esc(altChainOf(s)) +
+				' · ' + esc(s.terms.assetAmount) + ' ' + esc(assetChainOf(s)) + ' / ' + esc(s.terms.paymentAmount) + ' ' + esc(paymentChainOf(s)) +
 				' <button class="btn btn-xs btn-default otcRmSwap pull-right" data-id="' + esc(id) + '">×</button></div>';
 		}).join(''));
 	}
@@ -1118,29 +1120,29 @@ $(function () {
 			['State', '<span class="label label-info">' + esc(s.state) + '</span>'],
 			['Role', esc(s.role === 'seller' ? 'Seller (Seller)' : 'Buyer (Buyer)')],
 			['Decision', decisionSummary(s)],
-			['ROD amount', esc(s.terms.rodAmount)],
-			[esc(altChainOf(s)) + ' amount', esc(s.terms.altAmount)],
-			['Rate', esc(rate(s.terms.rodAmount, s.terms.altAmount)) + ' ' + esc(altChainOf(s)) + '/ROD'],
+			[esc(assetChainOf(s)) + ' amount', esc(s.terms.assetAmount)],
+			[esc(paymentChainOf(s)) + ' amount', esc(s.terms.paymentAmount)],
+			['Rate', esc(rate(s.terms.assetAmount, s.terms.paymentAmount)) + ' ' + esc(paymentChainOf(s)) + '/' + esc(assetChainOf(s))],
 			['Bilateral ready', s.bilateralReady ? '<span class="label label-success">yes</span>' : '<span class="label label-default">no</span>'],
 			['Local readiness', readinessSummary(readiness.local)],
 			['Remote readiness', readinessSummary(readiness.remote)],
 			['Release height', esc(s.terms.releaseRodHeight)],
-			['ROD refund height', esc(s.terms.refundRodHeight || '—') + (s.rodRefund && s.rodRefund.signedHex ? ' · <span class="label label-success">refund signed</span>' : ' · <span class="label label-default">refund pending</span>')],
-			[esc(altChainOf(s)) + ' refund height', esc(s.terms.altRefundLockHeight || '—') + (s.altRefund && s.altRefund.signedHex ? ' · <span class="label label-success">refund signed</span>' : ' · <span class="label label-default">refund pending</span>')],
-			['Planned ROD funding', s.plannedRodFunding ? '<code style="font-size:10px;word-break:break-all">' + esc(s.plannedRodFunding.txid) + '</code>' : '<span class="text-muted">not planned</span>'],
-			['Planned ' + esc(altChainOf(s)) + ' funding', s.plannedAltFunding ? '<code style="font-size:10px;word-break:break-all">' + esc(s.plannedAltFunding.txid) + '</code>' : '<span class="text-muted">not planned</span>'],
+			[esc(assetChainOf(s)) + ' refund height', esc(s.terms.assetRefundLockHeight || '—') + (s.assetRefund && s.assetRefund.signedHex ? ' · <span class="label label-success">refund signed</span>' : ' · <span class="label label-default">refund pending</span>')],
+			[esc(paymentChainOf(s)) + ' refund height', esc(s.terms.paymentRefundLockHeight || '—') + (s.paymentRefund && s.paymentRefund.signedHex ? ' · <span class="label label-success">refund signed</span>' : ' · <span class="label label-default">refund pending</span>')],
+			['Planned ' + esc(assetChainOf(s)) + ' funding', s.plannedAssetFunding ? '<code style="font-size:10px;word-break:break-all">' + esc(s.plannedAssetFunding.txid) + '</code>' : '<span class="text-muted">not planned</span>'],
+			['Planned ' + esc(paymentChainOf(s)) + ' funding', s.plannedPaymentFunding ? '<code style="font-size:10px;word-break:break-all">' + esc(s.plannedPaymentFunding.txid) + '</code>' : '<span class="text-muted">not planned</span>'],
 			['Prepared', (s.localPrepared ? '<span class="label label-success">local</span>' : '<span class="label label-default">local pending</span>') + ' ' + (s.remotePrepared ? '<span class="label label-success">remote</span>' : '<span class="label label-default">remote pending</span>')],
-			['Adaptor sigs', (s.localAltAdaptorSignature || s.localRodAdaptorSignature ? '<span class="label label-success">local sent</span>' : '<span class="label label-default">local pending</span>') + ' ' + (s.remoteAltAdaptorSignature || s.remoteRodAdaptorSignature ? '<span class="label label-success">remote verified</span>' : '<span class="label label-default">remote pending</span>')],
+			['Adaptor sigs', (s.localPaymentAdaptorSignature || s.localAssetAdaptorSignature ? '<span class="label label-success">local sent</span>' : '<span class="label label-default">local pending</span>') + ' ' + (s.remotePaymentAdaptorSignature || s.remoteAssetAdaptorSignature ? '<span class="label label-success">remote verified</span>' : '<span class="label label-default">remote pending</span>')],
 			['Terms hash', '<code style="font-size:10px">' + esc(s.terms.termsHash) + '</code>'],
 			['Child index', esc(s.childIndex)],
-			['ROD multisig', '<code style="font-size:10px">' + esc(s.terms.rodFunding.multisigAddress) + '</code>'],
-			[esc(altChainOf(s)) + ' multisig', '<code style="font-size:10px">' + esc(s.terms.altFunding.multisigAddress) + '</code>'],
-			['ROD funding tx', txSummary(execution.rodFunding)],
-			[esc(altChainOf(s)) + ' funding tx', txSummary(execution.altFunding)],
-			[esc(altChainOf(s)) + ' claim tx', txSummary(execution.altClaim)],
-			['ROD claim tx', txSummary(execution.rodClaim)],
-			['Redeem (ROD)', '<code style="font-size:9px;word-break:break-all">' + esc(s.terms.rodFunding.redeemScript) + '</code>'],
-			['Redeem (' + esc(altChainOf(s)) + ')', '<code style="font-size:9px;word-break:break-all">' + esc(s.terms.altFunding.redeemScript) + '</code>'],
+			[esc(assetChainOf(s)) + ' multisig', '<code style="font-size:10px">' + esc(s.terms.assetFunding.multisigAddress) + '</code>'],
+			[esc(paymentChainOf(s)) + ' multisig', '<code style="font-size:10px">' + esc(s.terms.paymentFunding.multisigAddress) + '</code>'],
+			[esc(assetChainOf(s)) + ' funding tx', txSummary(execution.assetFunding)],
+			[esc(paymentChainOf(s)) + ' funding tx', txSummary(execution.paymentFunding)],
+			[esc(paymentChainOf(s)) + ' claim tx', txSummary(execution.paymentClaim)],
+			[esc(assetChainOf(s)) + ' claim tx', txSummary(execution.assetClaim)],
+			['Redeem (' + esc(assetChainOf(s)) + ')', '<code style="font-size:9px;word-break:break-all">' + esc(s.terms.assetFunding.redeemScript) + '</code>'],
+			['Redeem (' + esc(paymentChainOf(s)) + ')', '<code style="font-size:9px;word-break:break-all">' + esc(s.terms.paymentFunding.redeemScript) + '</code>'],
 			['Adaptor point', s.adaptorPoint ? '<code style="font-size:10px">' + esc(s.adaptorPoint) + '</code>' : '<span class="text-muted">not yet</span>'],
 			['Seller pubkey', '<code style="font-size:10px">' + esc(s.terms.sellerChildPubKey) + '</code>'],
 			['Buyer pubkey', '<code style="font-size:10px">' + esc(s.terms.buyerChildPubKey) + '</code>'],
@@ -1179,14 +1181,14 @@ $(function () {
 		if (!session.declined && !session.localAccepted && session.state !== 'COMPLETE') {
 			$('.otcExecBtn[data-action="accept-offer"]').show();
 		}
-		if (session.role === 'seller' && session.localAccepted && session.state !== 'COMPLETE' && !(execution.altClaim && execution.altClaim.txid)) {
-			$('.otcExecBtn[data-action="claim-alt"]').show().prop('disabled', !altClaimReady(session));
+		if (session.role === 'seller' && session.localAccepted && session.state !== 'COMPLETE' && !(execution.paymentClaim && execution.paymentClaim.txid)) {
+			$('.otcExecBtn[data-action="claim-payment"]').show().prop('disabled', !paymentClaimReady(session));
 		}
-		if (session.role === 'buyer' && session.localAccepted && session.state !== 'COMPLETE' && !(execution.rodClaim && execution.rodClaim.txid)) {
-			$('.otcExecBtn[data-action="claim-rod"]').show().prop('disabled', !rodClaimReady(session));
+		if (session.role === 'buyer' && session.localAccepted && session.state !== 'COMPLETE' && !(execution.assetClaim && execution.assetClaim.txid)) {
+			$('.otcExecBtn[data-action="claim-asset"]').show().prop('disabled', !assetClaimReady(session));
 		}
-		var ownRefund = session.role === 'seller' ? session.rodRefund : session.altRefund;
-		var ownFunding = session.role === 'seller' ? execution.rodFunding : execution.altFunding;
+		var ownRefund = session.role === 'seller' ? session.assetRefund : session.paymentRefund;
+		var ownFunding = session.role === 'seller' ? execution.assetFunding : execution.paymentFunding;
 		if (ownRefund && ownRefund.signedHex && ownFunding && ownFunding.txid && session.state !== 'COMPLETE') {
 			$('.otcExecBtn[data-action="attempt-refund"]').show();
 		}
@@ -1195,40 +1197,52 @@ $(function () {
 	function executionStatusHtml(session) {
 		var e = session.execution || {};
 		return [
-			'<div><b>ROD funding:</b> ' + txSummary(e.rodFunding) + '</div>',
-			'<div><b>' + esc(altChainOf(session)) + ' funding:</b> ' + txSummary(e.altFunding) + '</div>',
-			'<div><b>' + esc(altChainOf(session)) + ' claim:</b> ' + txSummary(e.altClaim) + '</div>',
-			'<div><b>ROD claim:</b> ' + txSummary(e.rodClaim) + '</div>'
+			'<div><b>' + esc(assetChainOf(session)) + ' funding:</b> ' + txSummary(e.assetFunding) + '</div>',
+			'<div><b>' + esc(paymentChainOf(session)) + ' funding:</b> ' + txSummary(e.paymentFunding) + '</div>',
+			'<div><b>' + esc(paymentChainOf(session)) + ' claim:</b> ' + txSummary(e.paymentClaim) + '</div>',
+			'<div><b>' + esc(assetChainOf(session)) + ' claim:</b> ' + txSummary(e.assetClaim) + '</div>'
 		].join('');
 	}
 
-	/* Every swap is ROD <-> one "alt" chain. Which alt chain is fixed in the
-	   canonical terms at negotiation time, so the entire execution path must
-	   read it from there instead of assuming Litecoin. Sessions persisted
-	   before multi-alt-chain support existed carry no altChain field and are
-	   therefore Litecoin by definition. */
-	var DEFAULT_ALT_CHAIN = 'LTC';
+	var DEFAULT_ASSET_CHAIN = SWAP.DEFAULT_ASSET_CHAIN;
+	var DEFAULT_PAYMENT_CHAIN = SWAP.DEFAULT_PAYMENT_CHAIN;
 
-	function altChainOf(sessionOrTerms) {
-		if (!sessionOrTerms) return DEFAULT_ALT_CHAIN;
+	function assetChainOf(sessionOrTerms) {
+		if (!sessionOrTerms) return DEFAULT_ASSET_CHAIN;
 		var terms = sessionOrTerms.terms || sessionOrTerms;
-		var code = terms && terms.altChain;
-		return (code && CHAINS.definitions[code] && code !== 'ROD') ? code : DEFAULT_ALT_CHAIN;
+		var code = terms && terms.assetChain;
+		return (code && CHAINS.definitions[code]) ? code : DEFAULT_ASSET_CHAIN;
 	}
 
-	/* Alt chain currently chosen in the New swap form (before any session or
-	   terms exist yet). */
-	function selectedAltChain() {
-		var code = $.trim($('#nsAltChain').val() || '');
-		return (code && CHAINS.definitions[code] && code !== 'ROD') ? code : DEFAULT_ALT_CHAIN;
+	function paymentChainOf(sessionOrTerms) {
+		if (!sessionOrTerms) return DEFAULT_PAYMENT_CHAIN;
+		var terms = sessionOrTerms.terms || sessionOrTerms;
+		var code = terms && terms.paymentChain;
+		return (code && CHAINS.definitions[code]) ? code : DEFAULT_PAYMENT_CHAIN;
+	}
+
+	function selectedAssetChain() {
+		var code = $.trim($('#nsAssetChain').val() || '');
+		return (code && CHAINS.definitions[code]) ? code : DEFAULT_ASSET_CHAIN;
+	}
+
+	function selectedPaymentChain() {
+		var code = $.trim($('#nsPaymentChain').val() || '');
+		return (code && CHAINS.definitions[code]) ? code : DEFAULT_PAYMENT_CHAIN;
+	}
+
+	function refundBlocksForRole(chainCode, chainConfig, role) {
+		var configured = chainConfig && chainConfig.refundBlocks;
+		var value = configured && typeof configured === 'object' ? parseInt(configured[role], 10) : 0;
+		return value > 0 ? value : CHAINS.getRefundBlocks(chainCode, role);
 	}
 
 	function pairLabel(sessionOrTerms) {
-		return 'ROD/' + altChainOf(sessionOrTerms);
+		return assetChainOf(sessionOrTerms) + '/' + paymentChainOf(sessionOrTerms);
 	}
 
 	function fundingFee(chainCode) {
-		return chainCode === 'ROD' ? '0.00051900' : SWAP.altFees(chainCode).fundingFee;
+		return SWAP.chainFees(chainCode).funding;
 	}
 
 	/* Settlement fees come from canonical terms so both sides construct
@@ -1236,21 +1250,23 @@ $(function () {
 	   the sighashes and invalidate every exchanged signature). */
 	function claimFee(session, chainCode) {
 		var terms = session && session.terms || {};
-		if (chainCode === 'ROD') return terms.rodClaimFee || SWAP.DEFAULT_FEES.rodClaimFee;
-		return terms.altClaimFee || SWAP.altFees(chainCode).claimFee;
+		if (!session) return SWAP.chainFees(chainCode).claim;
+		if (chainCode === assetChainOf(terms)) return terms.assetClaimFee || SWAP.chainFees(chainCode).claim;
+		return terms.paymentClaimFee || SWAP.chainFees(chainCode).claim;
 	}
 
 	function refundFee(session, chainCode) {
 		var terms = session && session.terms || {};
-		if (chainCode === 'ROD') return terms.rodRefundFee || SWAP.DEFAULT_FEES.rodRefundFee;
-		return terms.altRefundFee || SWAP.altFees(chainCode).refundFee;
+		if (!session) return SWAP.chainFees(chainCode).refund;
+		if (chainCode === assetChainOf(terms)) return terms.assetRefundFee || SWAP.chainFees(chainCode).refund;
+		return terms.paymentRefundFee || SWAP.chainFees(chainCode).refund;
 	}
 
 	/* Planned (signed, unbroadcast) funding is the single source of truth for
 	   every dependent transaction: refunds, adaptor sigs and claims all spend
 	   the planned outpoint, and the on-chain funding is later gated to match. */
 	function plannedFunding(session, chainCode) {
-		return chainCode === 'ROD' ? session.plannedRodFunding : session.plannedAltFunding;
+		return chainCode === assetChainOf(session) ? session.plannedAssetFunding : session.plannedPaymentFunding;
 	}
 
 	function claimTxFor(session, chainCode) {
@@ -1263,20 +1279,20 @@ $(function () {
 		var planned = plannedFunding(session, chainCode);
 		if (!planned || !planned.txid) throw new Error(chainCode + ' planned funding is missing');
 		var terms = session.terms;
-		var destination = chainCode === 'ROD' ? terms.sellerRodRefundAddress : terms.buyerAltRefundAddress;
-		var lockHeight = chainCode === 'ROD' ? terms.refundRodHeight : terms.altRefundLockHeight;
+		var destination = chainCode === assetChainOf(terms) ? terms.sellerAssetRefundAddress : terms.buyerPaymentRefundAddress;
+		var lockHeight = chainCode === assetChainOf(terms) ? terms.assetRefundLockHeight : terms.paymentRefundLockHeight;
 		if (!destination) throw new Error(chainCode + ' refund destination missing from terms');
 		if (!lockHeight) throw new Error(chainCode + ' refund lock height missing from terms');
 		return ENGINE.buildRefundTxFromFunding(chainCode, planned, fundingTarget(session, chainCode).redeemScript, destination, refundFee(session, chainCode), lockHeight);
 	}
 
-	function altClaimReady(session) {
-		return !!(session.remoteAltAdaptorSignature && session.adaptorSecret && session.plannedAltFunding &&
-			session.execution && session.execution.altFunding && session.execution.altFunding.verifiedLocally);
+	function paymentClaimReady(session) {
+		return !!(session.remotePaymentAdaptorSignature && session.adaptorSecret && session.plannedPaymentFunding &&
+			session.execution && session.execution.paymentFunding && session.execution.paymentFunding.verifiedLocally);
 	}
 
-	function rodClaimReady(session) {
-		return !!(session.remoteRodAdaptorSignature && session.recoveredAdaptorSecret && session.plannedRodFunding);
+	function assetClaimReady(session) {
+		return !!(session.remoteAssetAdaptorSignature && session.recoveredAdaptorSecret && session.plannedAssetFunding);
 	}
 
 	/* ============ NEW SWAP ============ */
@@ -1361,14 +1377,14 @@ $(function () {
 		return d.promise();
 	}
 
-	function ensureWalletFundsForRole(role, rodAmount, altAmount, altChain) {
+	function ensureWalletFundsForRole(role, assetAmount, paymentAmount, paymentChain, assetChain) {
 		var d = $.Deferred();
 		if (!walletId || !walletId.wif) {
 			d.reject('Open your wallet first');
 			return d.promise();
 		}
-		var requiredChain = role === 'seller' ? 'ROD' : (altChain || selectedAltChain());
-		var requiredAmount = role === 'seller' ? rodAmount : altAmount;
+		var requiredChain = role === 'seller' ? (assetChain || selectedAssetChain()) : (paymentChain || selectedPaymentChain());
+		var requiredAmount = role === 'seller' ? assetAmount : paymentAmount;
 		var requiredUnits = decimalToBaseUnits(requiredAmount);
 		if (!requiredUnits || requiredUnits === '0') {
 			d.reject('Enter a positive ' + requiredChain + ' amount');
@@ -1396,9 +1412,9 @@ $(function () {
 		return d.promise();
 	}
 
-	function buildLocalReadinessUnchecked(role, rodAmount, altAmount, reason, altChain) {
-		var requiredChain = role === 'seller' ? 'ROD' : (altChain || selectedAltChain());
-		var requiredAmount = role === 'seller' ? rodAmount : altAmount;
+	function buildLocalReadinessUnchecked(role, assetAmount, paymentAmount, reason, paymentChain, assetChain) {
+		var requiredChain = role === 'seller' ? (assetChain || selectedAssetChain()) : (paymentChain || selectedPaymentChain());
+		var requiredAmount = role === 'seller' ? assetAmount : paymentAmount;
 		return {
 			role: role,
 			chain: requiredChain,
@@ -1410,12 +1426,12 @@ $(function () {
 		};
 	}
 
-	function readinessRoleChain(role, altChain) {
-		return role === 'seller' ? 'ROD' : (altChain || selectedAltChain());
+	function readinessRoleChain(role, paymentChain, assetChain) {
+		return role === 'seller' ? (assetChain || selectedAssetChain()) : (paymentChain || selectedPaymentChain());
 	}
 
 	function readinessRequiredAmount(session, role) {
-		return role === 'seller' ? session.terms.rodAmount : session.terms.altAmount;
+		return role === 'seller' ? session.terms.assetAmount : session.terms.paymentAmount;
 	}
 
 	function readinessSummary(readiness) {
@@ -1427,7 +1443,7 @@ $(function () {
 	}
 
 	function readinessMatches(session, readiness, expectedRole) {
-		return !!(readiness && readiness.role === expectedRole && readiness.chain === readinessRoleChain(expectedRole, altChainOf(session)) && readiness.requiredAmount === readinessRequiredAmount(session, expectedRole));
+		return !!(readiness && readiness.role === expectedRole && readiness.chain === readinessRoleChain(expectedRole, paymentChainOf(session), assetChainOf(session)) && readiness.requiredAmount === readinessRequiredAmount(session, expectedRole));
 	}
 
 	function saveLocalReadiness(session, readiness, note) {
@@ -1595,7 +1611,7 @@ $(function () {
 
 	   Several steps build their arguments with calls that throw SYNCHRONOUSLY —
 	   requireWalletWif() is the common one, e.g.
-	       ENGINE.buildFundingTx('ROD', requireWalletWif(), …).then(…).fail(…)
+	       ENGINE.buildFundingTx(assetChainOf(sess), requireWalletWif(), …).then(…).fail(…)
 	   where the throw happens while evaluating the arguments, so the promise is
 	   never constructed and NEITHER handler ever runs. The lock taken a line
 	   earlier was then held until the 120 s staleness ceiling expired, freezing
@@ -1655,16 +1671,16 @@ $(function () {
 	}
 
 	function fundingTarget(session, chainCode) {
-		return chainCode === 'ROD' ? session.terms.rodFunding : session.terms.altFunding;
+		return chainCode === assetChainOf(session) ? session.terms.assetFunding : session.terms.paymentFunding;
 	}
 
-	function payoutDestinationLabel(chainCode) {
-		return chainCode === 'ROD' ? 'buyer ROD wallet address' : 'seller ' + chainCode + ' wallet address';
+	function payoutDestinationLabel(session, chainCode) {
+		return chainCode === assetChainOf(session) ? 'buyer ' + chainCode + ' wallet address' : 'seller ' + chainCode + ' wallet address';
 	}
 
 	function claimDestination(session, chainCode) {
-		var address = chainCode === altChainOf(session) ? session.terms.sellerAltPayoutAddress : session.terms.buyerRodPayoutAddress;
-		if (!address) throw new Error('Missing ' + payoutDestinationLabel(chainCode) + ' in swap terms');
+		var address = chainCode === paymentChainOf(session) ? session.terms.sellerPaymentPayoutAddress : session.terms.buyerAssetPayoutAddress;
+		if (!address) throw new Error('Missing ' + payoutDestinationLabel(session, chainCode) + ' in swap terms');
 		return address;
 	}
 
@@ -1675,13 +1691,14 @@ $(function () {
 
 	function verifyFunding(session, chainCode, manualTxid) {
 		var target = fundingTarget(session, chainCode);
-		var txid = $.trim(manualTxid || (session.execution && session.execution[chainCode === 'ROD' ? 'rodFunding' : 'altFunding'] && session.execution[chainCode === 'ROD' ? 'rodFunding' : 'altFunding'].txid) || '');
+		var fundingKey = chainCode === assetChainOf(session) ? 'assetFunding' : 'paymentFunding';
+		var txid = $.trim(manualTxid || (session.execution && session.execution[fundingKey] && session.execution[fundingKey].txid) || '');
 		if (!txid) return $.Deferred().reject(new Error('Enter or receive ' + chainCode + ' funding txid first')).promise();
 		return ENGINE.findFundingOutput(chainCode, txid, target.multisigAddress, target.amount).then(function (evidence) {
 			/* Set ONLY here: this browser checked the chain API itself.
 			   Remote evidence messages have this flag stripped on receipt. */
 			evidence.verifiedLocally = true;
-			saveExecution(session, chainCode === 'ROD' ? 'rodFunding' : 'altFunding', evidence);
+			saveExecution(session, fundingKey, evidence);
 			return evidence;
 		});
 	}
@@ -1691,12 +1708,13 @@ $(function () {
 	}
 
 	function validateRefundOrderingFresh(session) {
-		var chainCode = altChainOf(session);
-		return $.when(ENGINE.getRodHeight(), ENGINE.getAltHeight(chainCode)).then(function (rodHeight, altHeight) {
+		var assetCode = assetChainOf(session), paymentCode = paymentChainOf(session);
+		return $.when(ENGINE.getChainHeight(assetCode), ENGINE.getChainHeight(paymentCode), ENGINE.getRodHeight()).then(function (assetHeight, paymentHeight, controlHeight) {
 			return SWAP.assertRefundOrdering(
 				session.terms,
-				scalarResult(rodHeight),
-				scalarResult(altHeight)
+				scalarResult(assetHeight),
+				scalarResult(paymentHeight),
+				scalarResult(controlHeight)
 			);
 		});
 	}
@@ -1729,12 +1747,12 @@ $(function () {
 		showActiveSwap(session.swapId);
 	}
 
-	var STATE_ORDER = ['OPEN', 'NEGOTIATING', 'TERMS_ACCEPTED', 'REFUNDS_READY', 'SIGNATURES_EXCHANGED', 'PREPARED', 'SELLER_ROD_FUNDED', 'BUYER_ALT_FUNDED', 'READY', 'ALT_CLAIMED', 'SECRET_RECOVERED', 'ROD_CLAIMED', 'COMPLETE'];
+	var STATE_ORDER = ['OPEN', 'NEGOTIATING', 'TERMS_ACCEPTED', 'REFUNDS_READY', 'SIGNATURES_EXCHANGED', 'PREPARED', 'ASSET_FUNDED', 'PAYMENT_FUNDED', 'READY', 'PAYMENT_CLAIMED', 'SECRET_RECOVERED', 'ASSET_CLAIMED', 'COMPLETE'];
 	function stateRank(state) { return STATE_ORDER.indexOf(state); }
 	function isTerminal(session) {
 		return !session || session.declined || session.state === 'COMPLETE' ||
 			session.state === 'REFUNDED' || session.state === 'PARTIALLY_SETTLED' ||
-			session.state === 'ROD_REFUNDED' || session.state === 'ALT_REFUNDED';
+			session.state === 'ASSET_REFUNDED' || session.state === 'PAYMENT_REFUNDED';
 	}
 
 	var REFUND_SAFETY_PROOF_MAX_AGE_MS = 60000;
@@ -1766,7 +1784,7 @@ $(function () {
 			autoContinueSwap(live);
 		}, function (error) {
 			var message = error && error.message || String(error);
-			if (/refund ordering|future lock heights|unsupported alt chain/i.test(message)) {
+			if (/refund ordering|future lock heights|unsupported swap chain/i.test(message)) {
 				var live = ENGINE.restoreLive(session.swapId) || session;
 				live._refundSafetyFault = message;
 				ENGINE.saveLive(live);
@@ -1801,8 +1819,8 @@ $(function () {
 		}
 		var execution = latest.execution || {};
 		var ownFundingMissing = latest.role === 'seller'
-			? !(execution.rodFunding && execution.rodFunding.txid)
-			: !(execution.altFunding && execution.altFunding.txid);
+			? !(execution.assetFunding && execution.assetFunding.txid)
+			: !(execution.paymentFunding && execution.paymentFunding.txid);
 		if (stateRank(latest.state) >= stateRank('PREPARED') && ownFundingMissing &&
 			!ensureRefundSafetyGate(latest, 'funding')) return;
 		if (advanceFunding(latest)) return;
@@ -1813,127 +1831,127 @@ $(function () {
 	   Sync, idempotent, safe to call from handlers and from the tick. */
 	function processPendingProtocol(sess) {
 		var terms = sess.terms;
-		/* Buyer: verify + countersign Seller's ROD refund */
-		if (sess.role === 'buyer' && sess._pendingRodRefundSig && !sess.rodRefundCosigned && sess.plannedRodFunding) {
+		/* Buyer: verify + countersign Seller's asset refund */
+		if (sess.role === 'buyer' && sess._pendingAssetRefundSig && !sess.assetRefundCosigned && sess.plannedAssetFunding) {
 			try {
-				var rodRefundTxB = refundTxFor(sess, 'ROD');
-				if (!ENGINE.verifyDerSig(ENGINE.sighash(rodRefundTxB), terms.sellerChildPubKey, sess._pendingRodRefundSig)) {
-					slog(sess.swapId, '✗ Seller ROD refund signature failed verification — dropped');
-					sess._pendingRodRefundSig = '';
+				var assetRefundTxB = refundTxFor(sess, assetChainOf(sess));
+				if (!ENGINE.verifyDerSig(ENGINE.sighash(assetRefundTxB), terms.sellerChildPubKey, sess._pendingAssetRefundSig)) {
+					slog(sess.swapId, '✗ Seller asset refund signature failed verification — dropped');
+					sess._pendingAssetRefundSig = '';
 					ENGINE.saveLive(sess);
 				} else {
-					var buyerRodRefundSig = ENGINE.signClaimTx('ROD', rodRefundTxB, getLocalChildWif(sess, 'ROD'));
-					sess.rodRefund = $.extend({}, sess.rodRefund || {}, { remoteSig: sess._pendingRodRefundSig, localSig: buyerRodRefundSig, lockHeight: terms.refundRodHeight });
-					sess.rodRefundCosigned = true;
-					sess._pendingRodRefundSig = '';
+					var buyerAssetRefundSig = ENGINE.signClaimTx(assetChainOf(sess), assetRefundTxB, getLocalChildWif(sess, assetChainOf(sess)));
+					sess.assetRefund = $.extend({}, sess.assetRefund || {}, { remoteSig: sess._pendingAssetRefundSig, localSig: buyerAssetRefundSig, lockHeight: terms.assetRefundLockHeight });
+					sess.assetRefundCosigned = true;
+					sess._pendingAssetRefundSig = '';
 					ENGINE.saveLive(sess);
-					publish(sess, 'swap_rod_refund_signature', { from: 'buyer', signature: buyerRodRefundSig, txid: sess.plannedRodFunding.txid, vout: 0, lockHeight: terms.refundRodHeight });
-					slog(sess.swapId, '✓ Verified + countersigned Seller ROD refund (locktime ' + terms.refundRodHeight + ')');
+					publish(sess, 'swap_asset_refund_signature', { from: 'buyer', signature: buyerAssetRefundSig, txid: sess.plannedAssetFunding.txid, vout: 0, lockHeight: terms.assetRefundLockHeight });
+					slog(sess.swapId, '✓ Verified + countersigned Seller asset refund (locktime ' + terms.assetRefundLockHeight + ')');
 				}
-			} catch (rodCosignError) { slog(sess.swapId, 'ROD refund countersign pending: ' + (rodCosignError.message || rodCosignError)); }
+			} catch (rodCosignError) { slog(sess.swapId, 'asset refund countersign pending: ' + (rodCosignError.message || rodCosignError)); }
 		}
 		/* Seller: verify + countersign Buyer's LTC refund */
-		if (sess.role === 'seller' && sess._pendingAltRefundSig && !sess.altRefundCosigned && sess.plannedAltFunding) {
+		if (sess.role === 'seller' && sess._pendingPaymentRefundSig && !sess.paymentRefundCosigned && sess.plannedPaymentFunding) {
 			try {
-				var altRefundTxA = refundTxFor(sess, altChainOf(sess));
-				if (!ENGINE.verifyDerSig(ENGINE.sighash(altRefundTxA), terms.buyerChildPubKey, sess._pendingAltRefundSig)) {
-					slog(sess.swapId, '✗ Buyer ' + altChainOf(sess) + ' refund signature failed verification — dropped');
-					sess._pendingAltRefundSig = '';
+				var paymentRefundTxA = refundTxFor(sess, paymentChainOf(sess));
+				if (!ENGINE.verifyDerSig(ENGINE.sighash(paymentRefundTxA), terms.buyerChildPubKey, sess._pendingPaymentRefundSig)) {
+					slog(sess.swapId, '✗ Buyer ' + paymentChainOf(sess) + ' refund signature failed verification — dropped');
+					sess._pendingPaymentRefundSig = '';
 					ENGINE.saveLive(sess);
 				} else {
-					var sellerAltRefundSig = ENGINE.signClaimTx(altChainOf(sess), altRefundTxA, getLocalChildWif(sess, altChainOf(sess)));
-					sess.altRefund = $.extend({}, sess.altRefund || {}, { remoteSig: sess._pendingAltRefundSig, localSig: sellerAltRefundSig, lockHeight: terms.altRefundLockHeight });
-					sess.altRefundCosigned = true;
-					sess._pendingAltRefundSig = '';
+					var sellerPaymentRefundSig = ENGINE.signClaimTx(paymentChainOf(sess), paymentRefundTxA, getLocalChildWif(sess, paymentChainOf(sess)));
+					sess.paymentRefund = $.extend({}, sess.paymentRefund || {}, { remoteSig: sess._pendingPaymentRefundSig, localSig: sellerPaymentRefundSig, lockHeight: terms.paymentRefundLockHeight });
+					sess.paymentRefundCosigned = true;
+					sess._pendingPaymentRefundSig = '';
 					ENGINE.saveLive(sess);
-					publish(sess, 'swap_alt_refund_signature', { from: 'seller', signature: sellerAltRefundSig, txid: sess.plannedAltFunding.txid, vout: 0, lockHeight: terms.altRefundLockHeight });
-					slog(sess.swapId, '✓ Verified + countersigned Buyer ' + altChainOf(sess) + ' refund (locktime ' + terms.altRefundLockHeight + ')');
+					publish(sess, 'swap_payment_refund_signature', { from: 'seller', signature: sellerPaymentRefundSig, txid: sess.plannedPaymentFunding.txid, vout: 0, lockHeight: terms.paymentRefundLockHeight });
+					slog(sess.swapId, '✓ Verified + countersigned Buyer ' + paymentChainOf(sess) + ' refund (locktime ' + terms.paymentRefundLockHeight + ')');
 				}
-			} catch (altCosignError) { slog(sess.swapId, '' + altChainOf(sess) + ' refund countersign pending: ' + (altCosignError.message || altCosignError)); }
+			} catch (altCosignError) { slog(sess.swapId, '' + paymentChainOf(sess) + ' refund countersign pending: ' + (altCosignError.message || altCosignError)); }
 		}
-		/* Seller: assemble her fully-signed ROD refund from Buyer's countersig */
-		if (sess.role === 'seller' && sess._pendingRodRefundCosig && sess.rodRefund && sess.rodRefund.localSig && !sess.rodRefund.signedHex) {
+		/* Seller: assemble her fully-signed asset refund from Buyer's countersig */
+		if (sess.role === 'seller' && sess._pendingAssetRefundCosig && sess.assetRefund && sess.assetRefund.localSig && !sess.assetRefund.signedHex) {
 			try {
-				var rodRefundTxA = refundTxFor(sess, 'ROD');
-				if (!ENGINE.verifyDerSig(ENGINE.sighash(rodRefundTxA), terms.buyerChildPubKey, sess._pendingRodRefundCosig)) {
-					slog(sess.swapId, '✗ Buyer ROD refund countersignature failed verification — dropped');
-					sess._pendingRodRefundCosig = '';
+				var assetRefundTxA = refundTxFor(sess, assetChainOf(sess));
+				if (!ENGINE.verifyDerSig(ENGINE.sighash(assetRefundTxA), terms.buyerChildPubKey, sess._pendingAssetRefundCosig)) {
+					slog(sess.swapId, '✗ Buyer asset refund countersignature failed verification — dropped');
+					sess._pendingAssetRefundCosig = '';
 					ENGINE.saveLive(sess);
 				} else {
-					var rodRefundOrdered = [sess.rodRefund.localSig, sess._pendingRodRefundCosig];
-					if (verifyClaimSignatures(sess, rodRefundTxA, rodRefundOrdered)) {
-						sess.rodRefund.remoteSig = sess._pendingRodRefundCosig;
-						ENGINE.applyMultisigSignatures('ROD', rodRefundTxA, terms.rodFunding.redeemScript, rodRefundOrdered);
-						sess.rodRefund.signedHex = rodRefundTxA.serialize();
-						sess.rodRefund.txid = txidOfHex(sess.rodRefund.signedHex);
-						sess._pendingRodRefundCosig = '';
+					var assetRefundOrdered = [sess.assetRefund.localSig, sess._pendingAssetRefundCosig];
+					if (verifyClaimSignatures(sess, assetRefundTxA, assetRefundOrdered)) {
+						sess.assetRefund.remoteSig = sess._pendingAssetRefundCosig;
+						ENGINE.applyMultisigSignatures(assetChainOf(sess), assetRefundTxA, terms.assetFunding.redeemScript, assetRefundOrdered);
+						sess.assetRefund.signedHex = assetRefundTxA.serialize();
+						sess.assetRefund.txid = txidOfHex(sess.assetRefund.signedHex);
+						sess._pendingAssetRefundCosig = '';
 						ENGINE.saveLive(sess);
-						slog(sess.swapId, '✓ ROD refund fully signed (' + short(sess.rodRefund.txid) + ', locktime ' + terms.refundRodHeight + ') — ROD funding is now protected');
+						slog(sess.swapId, '✓ asset refund fully signed (' + short(sess.assetRefund.txid) + ', locktime ' + terms.assetRefundLockHeight + ') — asset funding is now protected');
 					} else {
-						sess._pendingRodRefundCosig = '';
+						sess._pendingAssetRefundCosig = '';
 						ENGINE.saveLive(sess);
-						slog(sess.swapId, '✗ Assembled ROD refund failed CHECKMULTISIG verification');
+						slog(sess.swapId, '✗ Assembled asset refund failed CHECKMULTISIG verification');
 					}
 				}
-			} catch (rodAssembleError) { slog(sess.swapId, 'ROD refund assembly pending: ' + (rodAssembleError.message || rodAssembleError)); }
+			} catch (rodAssembleError) { slog(sess.swapId, 'asset refund assembly pending: ' + (rodAssembleError.message || rodAssembleError)); }
 		}
 		/* Buyer: assemble his fully-signed LTC refund from Seller's countersig */
-		if (sess.role === 'buyer' && sess._pendingAltRefundCosig && sess.altRefund && sess.altRefund.localSig && !sess.altRefund.signedHex) {
+		if (sess.role === 'buyer' && sess._pendingPaymentRefundCosig && sess.paymentRefund && sess.paymentRefund.localSig && !sess.paymentRefund.signedHex) {
 			try {
-				var altRefundTxB = refundTxFor(sess, altChainOf(sess));
-				if (!ENGINE.verifyDerSig(ENGINE.sighash(altRefundTxB), terms.sellerChildPubKey, sess._pendingAltRefundCosig)) {
-					slog(sess.swapId, '✗ Seller ' + altChainOf(sess) + ' refund countersignature failed verification — dropped');
-					sess._pendingAltRefundCosig = '';
+				var paymentRefundTxB = refundTxFor(sess, paymentChainOf(sess));
+				if (!ENGINE.verifyDerSig(ENGINE.sighash(paymentRefundTxB), terms.sellerChildPubKey, sess._pendingPaymentRefundCosig)) {
+					slog(sess.swapId, '✗ Seller ' + paymentChainOf(sess) + ' refund countersignature failed verification — dropped');
+					sess._pendingPaymentRefundCosig = '';
 					ENGINE.saveLive(sess);
 				} else {
-					var altRefundOrdered = [sess._pendingAltRefundCosig, sess.altRefund.localSig];
-					if (verifyClaimSignatures(sess, altRefundTxB, altRefundOrdered)) {
-						sess.altRefund.remoteSig = sess._pendingAltRefundCosig;
-						ENGINE.applyMultisigSignatures(altChainOf(sess), altRefundTxB, terms.altFunding.redeemScript, altRefundOrdered);
-						sess.altRefund.signedHex = altRefundTxB.serialize();
-						sess.altRefund.txid = txidOfHex(sess.altRefund.signedHex);
-						sess._pendingAltRefundCosig = '';
+					var paymentRefundOrdered = [sess._pendingPaymentRefundCosig, sess.paymentRefund.localSig];
+					if (verifyClaimSignatures(sess, paymentRefundTxB, paymentRefundOrdered)) {
+						sess.paymentRefund.remoteSig = sess._pendingPaymentRefundCosig;
+						ENGINE.applyMultisigSignatures(paymentChainOf(sess), paymentRefundTxB, terms.paymentFunding.redeemScript, paymentRefundOrdered);
+						sess.paymentRefund.signedHex = paymentRefundTxB.serialize();
+						sess.paymentRefund.txid = txidOfHex(sess.paymentRefund.signedHex);
+						sess._pendingPaymentRefundCosig = '';
 						ENGINE.saveLive(sess);
-						slog(sess.swapId, '✓ ' + altChainOf(sess) + ' refund fully signed (' + short(sess.altRefund.txid) + ', locktime ' + terms.altRefundLockHeight + ') — ' + altChainOf(sess) + ' funding is now protected');
+						slog(sess.swapId, '✓ ' + paymentChainOf(sess) + ' refund fully signed (' + short(sess.paymentRefund.txid) + ', locktime ' + terms.paymentRefundLockHeight + ') — ' + paymentChainOf(sess) + ' funding is now protected');
 					} else {
-						sess._pendingAltRefundCosig = '';
+						sess._pendingPaymentRefundCosig = '';
 						ENGINE.saveLive(sess);
-						slog(sess.swapId, '✗ Assembled ' + altChainOf(sess) + ' refund failed CHECKMULTISIG verification');
+						slog(sess.swapId, '✗ Assembled ' + paymentChainOf(sess) + ' refund failed CHECKMULTISIG verification');
 					}
 				}
-			} catch (altAssembleError) { slog(sess.swapId, '' + altChainOf(sess) + ' refund assembly pending: ' + (altAssembleError.message || altAssembleError)); }
+			} catch (altAssembleError) { slog(sess.swapId, '' + paymentChainOf(sess) + ' refund assembly pending: ' + (altAssembleError.message || altAssembleError)); }
 		}
 		/* Seller: verify Buyer's LTC claim adaptor signature */
-		if (sess.role === 'seller' && sess._pendingAltAdaptorSig && !sess.remoteAltAdaptorSignature && sess.plannedAltFunding && sess.adaptorPoint) {
+		if (sess.role === 'seller' && sess._pendingPaymentAdaptorSig && !sess.remotePaymentAdaptorSignature && sess.plannedPaymentFunding && sess.adaptorPoint) {
 			try {
-				var altClaimTxV = claimTxFor(sess, altChainOf(sess));
-				if (ENGINE.verifyAdaptorSig(ENGINE.sighash(altClaimTxV), terms.buyerChildPubKey, sess.adaptorPoint, sess._pendingAltAdaptorSig)) {
-					sess.remoteAltAdaptorSignature = sess._pendingAltAdaptorSig;
-					sess._pendingAltAdaptorSig = '';
+				var paymentClaimTxV = claimTxFor(sess, paymentChainOf(sess));
+				if (ENGINE.verifyAdaptorSig(ENGINE.sighash(paymentClaimTxV), terms.buyerChildPubKey, sess.adaptorPoint, sess._pendingPaymentAdaptorSig)) {
+					sess.remotePaymentAdaptorSignature = sess._pendingPaymentAdaptorSig;
+					sess._pendingPaymentAdaptorSig = '';
 					ENGINE.saveLive(sess);
-					slog(sess.swapId, '✓ Verified Buyer ' + altChainOf(sess) + ' claim adaptor signature (DLEQ + pre-signature)');
+					slog(sess.swapId, '✓ Verified Buyer ' + paymentChainOf(sess) + ' claim adaptor signature (DLEQ + pre-signature)');
 				} else {
-					sess._pendingAltAdaptorSig = '';
+					sess._pendingPaymentAdaptorSig = '';
 					ENGINE.saveLive(sess);
-					slog(sess.swapId, '✗ Buyer ' + altChainOf(sess) + ' adaptor signature failed verification — dropped');
+					slog(sess.swapId, '✗ Buyer ' + paymentChainOf(sess) + ' adaptor signature failed verification — dropped');
 				}
-			} catch (altAdaptorVerifyError) { slog(sess.swapId, '' + altChainOf(sess) + ' adaptor verify pending: ' + (altAdaptorVerifyError.message || altAdaptorVerifyError)); }
+			} catch (altAdaptorVerifyError) { slog(sess.swapId, '' + paymentChainOf(sess) + ' adaptor verify pending: ' + (altAdaptorVerifyError.message || altAdaptorVerifyError)); }
 		}
-		/* Buyer: verify Seller's ROD claim adaptor signature */
-		if (sess.role === 'buyer' && sess._pendingRodAdaptorSig && !sess.remoteRodAdaptorSignature && sess.plannedRodFunding && sess.adaptorPoint) {
+		/* Buyer: verify Seller's asset claim adaptor signature */
+		if (sess.role === 'buyer' && sess._pendingAssetAdaptorSig && !sess.remoteAssetAdaptorSignature && sess.plannedAssetFunding && sess.adaptorPoint) {
 			try {
-				var rodClaimTxV = claimTxFor(sess, 'ROD');
-				if (ENGINE.verifyAdaptorSig(ENGINE.sighash(rodClaimTxV), terms.sellerChildPubKey, sess.adaptorPoint, sess._pendingRodAdaptorSig)) {
-					sess.remoteRodAdaptorSignature = sess._pendingRodAdaptorSig;
-					sess._pendingRodAdaptorSig = '';
+				var assetClaimTxV = claimTxFor(sess, assetChainOf(sess));
+				if (ENGINE.verifyAdaptorSig(ENGINE.sighash(assetClaimTxV), terms.sellerChildPubKey, sess.adaptorPoint, sess._pendingAssetAdaptorSig)) {
+					sess.remoteAssetAdaptorSignature = sess._pendingAssetAdaptorSig;
+					sess._pendingAssetAdaptorSig = '';
 					ENGINE.saveLive(sess);
-					slog(sess.swapId, '✓ Verified Seller ROD claim adaptor signature (DLEQ + pre-signature)');
+					slog(sess.swapId, '✓ Verified Seller asset claim adaptor signature (DLEQ + pre-signature)');
 				} else {
-					sess._pendingRodAdaptorSig = '';
+					sess._pendingAssetAdaptorSig = '';
 					ENGINE.saveLive(sess);
-					slog(sess.swapId, '✗ Seller ROD adaptor signature failed verification — dropped');
+					slog(sess.swapId, '✗ Seller ' + assetChainOf(sess) + ' adaptor signature failed verification — dropped');
 				}
-			} catch (rodAdaptorVerifyError) { slog(sess.swapId, 'ROD adaptor verify pending: ' + (rodAdaptorVerifyError.message || rodAdaptorVerifyError)); }
+			} catch (rodAdaptorVerifyError) { slog(sess.swapId, assetChainOf(sess) + ' adaptor verify pending: ' + (rodAdaptorVerifyError.message || rodAdaptorVerifyError)); }
 		}
 	}
 
@@ -1981,65 +1999,65 @@ $(function () {
 			}
 		}
 		if (sess.role === 'seller') {
-			/* Plan ROD funding */
-			if (!sess.plannedRodFunding && sess.bilateralReady) {
-				return guardedStart(sess, 'planRod', function () {
-					ENGINE.buildFundingTx('ROD', requireWalletWif(), terms.rodFunding.multisigAddress, terms.rodAmount, fundingFee('ROD')).then(function (built) {
+			/* Plan asset funding */
+			if (!sess.plannedAssetFunding && sess.bilateralReady) {
+				return guardedStart(sess, 'planAsset', function () {
+					ENGINE.buildFundingTx(assetChainOf(sess), requireWalletWif(), terms.assetFunding.multisigAddress, terms.assetAmount, fundingFee(assetChainOf(sess))).then(function (built) {
 						var live = ENGINE.restoreLive(sess.swapId) || sess;
-						live.plannedRodFunding = { txid: built.txid, vout: 0, value: CHAINS.decimalToSats(terms.rodAmount), amount: terms.rodAmount, txhex: built.txhex };
+						live.plannedAssetFunding = { txid: built.txid, vout: 0, value: CHAINS.decimalToSats(terms.assetAmount), amount: terms.assetAmount, txhex: built.txhex };
 						ENGINE.saveLive(live);
-						publish(live, 'swap_rod_funding_planned', { txid: built.txid, vout: 0, value: live.plannedRodFunding.value, amount: terms.rodAmount });
-						slog(live.swapId, '→ Planned ROD funding ' + short(built.txid) + ' (signed, NOT broadcast)');
-						clearAutomationBusy(sess, 'planRod');
+						publish(live, 'swap_asset_funding_planned', { txid: built.txid, vout: 0, value: live.plannedAssetFunding.value, amount: terms.assetAmount });
+						slog(live.swapId, '→ Planned asset funding ' + short(built.txid) + ' (signed, NOT broadcast)');
+						clearAutomationBusy(sess, 'planAsset');
 						autoContinueSwap(live);
 					}).fail(function (error) {
-						failAutomationBusy(sess, 'planRod', error);
-						slog(sess.swapId, 'ROD funding planning blocked: ' + (error && error.message || error) + backoffNote(sess, 'planRod'));
+						failAutomationBusy(sess, 'planAsset', error);
+						slog(sess.swapId, 'asset funding planning blocked: ' + (error && error.message || error) + backoffNote(sess, 'planAsset'));
 					});
 				});
 			}
-			/* Sign own ROD refund and send it for countersignature */
-			if (sess.plannedRodFunding && !(sess.rodRefund && sess.rodRefund.localSig)) {
+			/* Sign own asset refund and send it for countersignature */
+			if (sess.plannedAssetFunding && !(sess.assetRefund && sess.assetRefund.localSig)) {
 				try {
-					var rodRefundTx = refundTxFor(sess, 'ROD');
-					var rodRefundSig = ENGINE.signClaimTx('ROD', rodRefundTx, getLocalChildWif(sess, 'ROD'));
-					sess.rodRefund = $.extend({}, sess.rodRefund || {}, {
-						lockHeight: terms.refundRodHeight, destination: terms.sellerRodRefundAddress,
-						fee: refundFee(sess, 'ROD'), localSig: rodRefundSig
+					var assetRefundTx = refundTxFor(sess, assetChainOf(sess));
+					var assetRefundSig = ENGINE.signClaimTx(assetChainOf(sess), assetRefundTx, getLocalChildWif(sess, assetChainOf(sess)));
+					sess.assetRefund = $.extend({}, sess.assetRefund || {}, {
+						lockHeight: terms.assetRefundLockHeight, destination: terms.sellerAssetRefundAddress,
+						fee: refundFee(sess, assetChainOf(sess)), localSig: assetRefundSig
 					});
 					ENGINE.saveLive(sess);
-					publish(sess, 'swap_rod_refund_signature', { from: 'seller', signature: rodRefundSig, txid: sess.plannedRodFunding.txid, vout: 0, value: sess.plannedRodFunding.value, lockHeight: terms.refundRodHeight });
-					slog(sess.swapId, '→ Signed ROD refund (locktime ' + terms.refundRodHeight + '); requested Buyer countersignature');
-				} catch (rodRefundError) { slog(sess.swapId, 'ROD refund signing blocked: ' + (rodRefundError.message || rodRefundError)); }
+					publish(sess, 'swap_asset_refund_signature', { from: 'seller', signature: assetRefundSig, txid: sess.plannedAssetFunding.txid, vout: 0, value: sess.plannedAssetFunding.value, lockHeight: terms.assetRefundLockHeight });
+					slog(sess.swapId, '→ Signed asset refund (locktime ' + terms.assetRefundLockHeight + '); requested Buyer countersignature');
+				} catch (assetRefundError) { slog(sess.swapId, 'asset refund signing blocked: ' + (assetRefundError.message || assetRefundError)); }
 				return true;
 			}
-			/* Send ROD claim adaptor signature once the refund layer is safe:
+			/* Send asset claim adaptor signature once the refund layer is safe:
 			   own refund fully signed and Buyer's refund countersigned. */
-			if (sess.rodRefund && sess.rodRefund.signedHex && sess.plannedAltFunding && sess.altRefundCosigned && sess.adaptorPoint && !sess.localRodAdaptorSignature) {
+			if (sess.assetRefund && sess.assetRefund.signedHex && sess.plannedPaymentFunding && sess.paymentRefundCosigned && sess.adaptorPoint && !sess.localAssetAdaptorSignature) {
 				try {
 					/* Pre-validate every field the adaptor-signing chain touches so
 					   that a bad session field gives an actionable message instead
 					   of a cryptic "Cannot read properties of undefined" deep inside
 					   the crypto or serialisation layer. */
-					var _ft = fundingTarget(sess, 'ROD');
-					if (!_ft || !_ft.redeemScript) slog(sess.swapId, 'DIAG: rodFunding target missing or no redeemScript');
-					var _cd = claimDestination(sess, 'ROD');
-					if (!_cd) slog(sess.swapId, 'DIAG: ROD claim destination is empty');
-					var _pf = plannedFunding(sess, 'ROD');
-					if (!_pf || !_pf.txid) slog(sess.swapId, 'DIAG: plannedRodFunding missing txid');
+					var _ft = fundingTarget(sess, assetChainOf(sess));
+					if (!_ft || !_ft.redeemScript) slog(sess.swapId, 'DIAG: assetFunding target missing or no redeemScript');
+					var _cd = claimDestination(sess, assetChainOf(sess));
+					if (!_cd) slog(sess.swapId, 'DIAG: asset claim destination is empty');
+					var _pf = plannedFunding(sess, assetChainOf(sess));
+					if (!_pf || !_pf.txid) slog(sess.swapId, 'DIAG: plannedAssetFunding missing txid');
 					if (!sess.localChildPrivateKey) slog(sess.swapId, 'DIAG: localChildPrivateKey is empty — wallet locked or wrong WIF?');
-					var rodClaimTx = claimTxFor(sess, 'ROD');
-					var rodAdaptor = ENGINE.makeAdaptorSig(sess, rodClaimTx);
-					sess.localRodAdaptorSignature = rodAdaptor.hex;
+					var assetClaimTx = claimTxFor(sess, assetChainOf(sess));
+					var rodAdaptor = ENGINE.makeAdaptorSig(sess, assetClaimTx);
+					sess.localAssetAdaptorSignature = rodAdaptor.hex;
 					SWAP.safeAdvance(sess, 'REFUNDS_READY', 'Both timelocked refunds pre-signed');
 					ENGINE.saveLive(sess);
-					publish(sess, 'swap_rod_adaptor_signature', { hex: rodAdaptor.hex, txid: sess.plannedRodFunding.txid, vout: 0 });
-					slog(sess.swapId, '→ Sent ROD claim adaptor signature (encrypted to adaptor point)');
-				} catch (rodAdaptorError) { slog(sess.swapId, 'ROD adaptor signing blocked: ' + (rodAdaptorError.message || rodAdaptorError)); }
+					publish(sess, 'swap_asset_adaptor_signature', { hex: rodAdaptor.hex, txid: sess.plannedAssetFunding.txid, vout: 0 });
+					slog(sess.swapId, '→ Sent asset claim adaptor signature (encrypted to adaptor point)');
+				} catch (rodAdaptorError) { slog(sess.swapId, assetChainOf(sess) + ' adaptor signing blocked: ' + (rodAdaptorError.message || rodAdaptorError)); }
 				return true;
 			}
 			/* PREPARED gate */
-			if (sess.localRodAdaptorSignature && sess.remoteAltAdaptorSignature && sess.rodRefund && sess.rodRefund.signedHex && !sess.localPrepared) {
+			if (sess.localAssetAdaptorSignature && sess.remotePaymentAdaptorSignature && sess.assetRefund && sess.assetRefund.signedHex && !sess.localPrepared) {
 				SWAP.safeAdvance(sess, 'SIGNATURES_EXCHANGED', 'Adaptor signatures exchanged and verified');
 				SWAP.safeAdvance(sess, 'PREPARED', 'All pre-funding requirements verified');
 				sess.localPrepared = true;
@@ -2054,58 +2072,58 @@ $(function () {
 		/* --- Buyer --- */
 		if (sess.role === 'buyer') {
 			/* Plan LTC funding */
-			if (!sess.plannedAltFunding && sess.bilateralReady) {
-				return guardedStart(sess, 'planAlt', function () {
-					ENGINE.buildFundingTx(altChainOf(sess), requireWalletWif(), terms.altFunding.multisigAddress, terms.altAmount, fundingFee(altChainOf(sess))).then(function (built) {
+			if (!sess.plannedPaymentFunding && sess.bilateralReady) {
+				return guardedStart(sess, 'planPayment', function () {
+					ENGINE.buildFundingTx(paymentChainOf(sess), requireWalletWif(), terms.paymentFunding.multisigAddress, terms.paymentAmount, fundingFee(paymentChainOf(sess))).then(function (built) {
 						var live = ENGINE.restoreLive(sess.swapId) || sess;
-						live.plannedAltFunding = { txid: built.txid, vout: 0, value: CHAINS.decimalToSats(terms.altAmount), amount: terms.altAmount, txhex: built.txhex };
+						live.plannedPaymentFunding = { txid: built.txid, vout: 0, value: CHAINS.decimalToSats(terms.paymentAmount), amount: terms.paymentAmount, txhex: built.txhex };
 						ENGINE.saveLive(live);
-						publish(live, 'swap_alt_funding_planned', { txid: built.txid, vout: 0, value: live.plannedAltFunding.value, amount: terms.altAmount });
-						slog(live.swapId, '→ Planned ' + altChainOf(live) + ' funding ' + short(built.txid) + ' (signed, NOT broadcast)');
-						clearAutomationBusy(sess, 'planAlt');
+						publish(live, 'swap_payment_funding_planned', { txid: built.txid, vout: 0, value: live.plannedPaymentFunding.value, amount: terms.paymentAmount });
+						slog(live.swapId, '→ Planned ' + paymentChainOf(live) + ' funding ' + short(built.txid) + ' (signed, NOT broadcast)');
+						clearAutomationBusy(sess, 'planPayment');
 						autoContinueSwap(live);
 					}).fail(function (error) {
-						failAutomationBusy(sess, 'planAlt', error);
-						slog(sess.swapId, '' + altChainOf(sess) + ' funding planning blocked: ' + (error && error.message || error) + backoffNote(sess, 'planAlt'));
+						failAutomationBusy(sess, 'planPayment', error);
+						slog(sess.swapId, '' + paymentChainOf(sess) + ' funding planning blocked: ' + (error && error.message || error) + backoffNote(sess, 'planPayment'));
 					});
 				});
 			}
 			/* Sign own LTC refund and send for countersignature */
-			if (sess.plannedAltFunding && !(sess.altRefund && sess.altRefund.localSig)) {
+			if (sess.plannedPaymentFunding && !(sess.paymentRefund && sess.paymentRefund.localSig)) {
 				try {
-					var altRefundTx = refundTxFor(sess, altChainOf(sess));
-					var altRefundSig = ENGINE.signClaimTx(altChainOf(sess), altRefundTx, getLocalChildWif(sess, altChainOf(sess)));
-					sess.altRefund = $.extend({}, sess.altRefund || {}, {
-						lockHeight: terms.altRefundLockHeight, destination: terms.buyerAltRefundAddress,
-						fee: refundFee(sess, altChainOf(sess)), localSig: altRefundSig
+					var paymentRefundTx = refundTxFor(sess, paymentChainOf(sess));
+					var paymentRefundSig = ENGINE.signClaimTx(paymentChainOf(sess), paymentRefundTx, getLocalChildWif(sess, paymentChainOf(sess)));
+					sess.paymentRefund = $.extend({}, sess.paymentRefund || {}, {
+						lockHeight: terms.paymentRefundLockHeight, destination: terms.buyerPaymentRefundAddress,
+						fee: refundFee(sess, paymentChainOf(sess)), localSig: paymentRefundSig
 					});
 					ENGINE.saveLive(sess);
-					publish(sess, 'swap_alt_refund_signature', { from: 'buyer', signature: altRefundSig, txid: sess.plannedAltFunding.txid, vout: 0, value: sess.plannedAltFunding.value, lockHeight: terms.altRefundLockHeight });
-					slog(sess.swapId, '→ Signed ' + altChainOf(sess) + ' refund (locktime ' + terms.altRefundLockHeight + '); requested Seller countersignature');
-				} catch (altRefundError) { slog(sess.swapId, '' + altChainOf(sess) + ' refund signing blocked: ' + (altRefundError.message || altRefundError)); }
+					publish(sess, 'swap_payment_refund_signature', { from: 'buyer', signature: paymentRefundSig, txid: sess.plannedPaymentFunding.txid, vout: 0, value: sess.plannedPaymentFunding.value, lockHeight: terms.paymentRefundLockHeight });
+					slog(sess.swapId, '→ Signed ' + paymentChainOf(sess) + ' refund (locktime ' + terms.paymentRefundLockHeight + '); requested Seller countersignature');
+				} catch (paymentRefundError) { slog(sess.swapId, '' + paymentChainOf(sess) + ' refund signing blocked: ' + (paymentRefundError.message || paymentRefundError)); }
 				return true;
 			}
 			/* Send ALT claim adaptor signature */
-			if (sess.altRefund && sess.altRefund.signedHex && sess.plannedRodFunding && sess.rodRefundCosigned && sess.adaptorPoint && !sess.localAltAdaptorSignature) {
+			if (sess.paymentRefund && sess.paymentRefund.signedHex && sess.plannedAssetFunding && sess.assetRefundCosigned && sess.adaptorPoint && !sess.localPaymentAdaptorSignature) {
 				try {
-					var _altCc = altChainOf(sess);
+					var _altCc = paymentChainOf(sess);
 					var _altFt = fundingTarget(sess, _altCc);
-					if (!_altFt || !_altFt.redeemScript) slog(sess.swapId, 'DIAG: altFunding target missing or no redeemScript');
+					if (!_altFt || !_altFt.redeemScript) slog(sess.swapId, 'DIAG: paymentFunding target missing or no redeemScript');
 					var _altCd = claimDestination(sess, _altCc);
 					if (!_altCd) slog(sess.swapId, 'DIAG: ' + _altCc + ' claim destination is empty');
 					if (!sess.localChildPrivateKey) slog(sess.swapId, 'DIAG: localChildPrivateKey is empty — wallet locked or wrong WIF?');
-					var altClaimTx = claimTxFor(sess, _altCc);
-					var altAdaptor = ENGINE.makeAdaptorSig(sess, altClaimTx);
-					sess.localAltAdaptorSignature = altAdaptor.hex;
+					var paymentClaimTx = claimTxFor(sess, _altCc);
+					var altAdaptor = ENGINE.makeAdaptorSig(sess, paymentClaimTx);
+					sess.localPaymentAdaptorSignature = altAdaptor.hex;
 					SWAP.safeAdvance(sess, 'REFUNDS_READY', 'Both timelocked refunds pre-signed');
 					ENGINE.saveLive(sess);
-					publish(sess, 'swap_alt_adaptor_signature', { hex: altAdaptor.hex, txid: sess.plannedAltFunding.txid, vout: 0 });
+					publish(sess, 'swap_payment_adaptor_signature', { hex: altAdaptor.hex, txid: sess.plannedPaymentFunding.txid, vout: 0 });
 					slog(sess.swapId, '→ Sent ' + _altCc + ' claim adaptor signature (encrypted to adaptor point)');
-				} catch (altAdaptorError) { slog(sess.swapId, '' + altChainOf(sess) + ' adaptor signing blocked: ' + (altAdaptorError.message || altAdaptorError)); }
+				} catch (altAdaptorError) { slog(sess.swapId, '' + paymentChainOf(sess) + ' adaptor signing blocked: ' + (altAdaptorError.message || altAdaptorError)); }
 				return true;
 			}
 			/* PREPARED gate */
-			if (sess.localAltAdaptorSignature && sess.remoteRodAdaptorSignature && sess.altRefund && sess.altRefund.signedHex && !sess.localPrepared) {
+			if (sess.localPaymentAdaptorSignature && sess.remoteAssetAdaptorSignature && sess.paymentRefund && sess.paymentRefund.signedHex && !sess.localPrepared) {
 				SWAP.safeAdvance(sess, 'SIGNATURES_EXCHANGED', 'Adaptor signatures exchanged and verified');
 				SWAP.safeAdvance(sess, 'PREPARED', 'All pre-funding requirements verified');
 				sess.localPrepared = true;
@@ -2125,83 +2143,83 @@ $(function () {
 	}
 
 	/* ---- Stage 2: gated funding ----
-	   Seller broadcasts her PRE-SIGNED planned ROD funding only from PREPARED
-	   (with the counterparty also prepared). Buyer broadcasts the alt leg only after the
-	   on-chain ROD funding txid matches the planned txid AND reaches the
+	   Seller broadcasts her PRE-SIGNED planned asset funding only from PREPARED
+	   (with the counterparty also prepared). Buyer broadcasts the payment leg only after the
+	   on-chain asset funding txid matches the planned txid AND reaches the
 	   agreed confirmation count. */
 	function advanceFunding(sess) {
 		if (stateRank(sess.state) < stateRank('PREPARED')) return false;
 		var terms = sess.terms;
 		var execution = sess.execution || {};
-		var rodFunding = execution.rodFunding || null;
-		var altFunding = execution.altFunding || null;
+		var assetFunding = execution.assetFunding || null;
+		var paymentFunding = execution.paymentFunding || null;
 		if (sess.role === 'seller') {
-			if (!(rodFunding && rodFunding.txid)) {
-				if (!sess.remotePrepared) { slog(sess.swapId, 'Waiting for counterparty PREPARED before ROD funding broadcast'); return true; }
-				if (!markAutomationBusy(sess, 'fundRod')) return true;
-				ENGINE.broadcastTx('ROD', sess.plannedRodFunding.txhex).then(function (response) {
+			if (!(assetFunding && assetFunding.txid)) {
+				if (!sess.remotePrepared) { slog(sess.swapId, 'Waiting for counterparty PREPARED before asset funding broadcast'); return true; }
+				if (!markAutomationBusy(sess, 'fundAsset')) return true;
+				ENGINE.broadcastTx(assetChainOf(sess), sess.plannedAssetFunding.txhex).then(function (response) {
 					var live = ENGINE.restoreLive(sess.swapId) || sess;
 					live.execution = live.execution || {};
-					live.execution.rodFunding = {
-						txid: (response && response.txid) || live.plannedRodFunding.txid, vout: 0,
-						value: live.plannedRodFunding.value, amount: live.plannedRodFunding.amount,
+					live.execution.assetFunding = {
+						txid: (response && response.txid) || live.plannedAssetFunding.txid, vout: 0,
+						value: live.plannedAssetFunding.value, amount: live.plannedAssetFunding.amount,
 						broadcastAt: new Date().toISOString()
 					};
-					SWAP.safeAdvance(live, 'SELLER_ROD_FUNDED', 'ROD funding broadcast');
+					SWAP.safeAdvance(live, 'ASSET_FUNDED', 'asset funding broadcast');
 					ENGINE.saveLive(live);
-					publish(live, 'swap_rod_funded', { funding: { txid: live.execution.rodFunding.txid, vout: 0, value: live.execution.rodFunding.value, amount: live.execution.rodFunding.amount } });
-					slog(live.swapId, '→ ROD funding broadcast ' + live.execution.rodFunding.txid);
-					clearAutomationBusy(sess, 'fundRod');
+					publish(live, 'swap_asset_funded', { funding: { txid: live.execution.assetFunding.txid, vout: 0, value: live.execution.assetFunding.value, amount: live.execution.assetFunding.amount } });
+					slog(live.swapId, '→ asset funding broadcast ' + live.execution.assetFunding.txid);
+					clearAutomationBusy(sess, 'fundAsset');
 					refreshSwaps(); showActiveSwap(live.swapId);
 					autoContinueSwap(live);
 				}).fail(function (error) {
-					failAutomationBusy(sess, 'fundRod', error);
-					slog(sess.swapId, 'ROD funding broadcast blocked: ' + (error && error.message || error) + backoffNote(sess, 'fundRod'));
+					failAutomationBusy(sess, 'fundAsset', error);
+					slog(sess.swapId, 'asset funding broadcast blocked: ' + (error && error.message || error) + backoffNote(sess, 'fundAsset'));
 				});
 				return true;
 			}
-			/* Self-verify own ROD funding until confirmation target reached */
-			if (rodFunding.txid && !confirmedEnough(rodFunding, terms.rodConfirmations)) {
-				if (!markAutomationBusy(sess, 'verifyRodSelf')) return true;
-				verifyFunding(sess, 'ROD', sess.plannedRodFunding.txid).then(function (evidence) {
+			/* Self-verify own asset funding until confirmation target reached */
+			if (assetFunding.txid && !confirmedEnough(assetFunding, terms.assetConfirmations)) {
+				if (!markAutomationBusy(sess, 'verifyAssetSelf')) return true;
+				verifyFunding(sess, assetChainOf(sess), sess.plannedAssetFunding.txid).then(function (evidence) {
 					var live = ENGINE.restoreLive(sess.swapId) || sess;
 					var cleanEvidence = $.extend({}, evidence); delete cleanEvidence.verifiedLocally;
-					publish(live, 'swap_rod_funded', { funding: cleanEvidence });
+					publish(live, 'swap_asset_funded', { funding: cleanEvidence });
 					var confs = evidence.confirmations || 0;
-					slog(live.swapId, '✓ Own ROD funding verified · ' + confs + '/' + terms.rodConfirmations + ' confs');
-					clearAutomationBusy(sess, 'verifyRodSelf');
+					slog(live.swapId, '✓ Own asset funding verified · ' + confs + '/' + terms.assetConfirmations + ' confs');
+					clearAutomationBusy(sess, 'verifyAssetSelf');
 					/* Only advance immediately when target reached; otherwise let the
 					   30 s liveness tick re-check to avoid hammering the explorer API. */
-					if (confs >= terms.rodConfirmations) autoContinueSwap(live);
+					if (confs >= terms.assetConfirmations) autoContinueSwap(live);
 				}).fail(function (error) {
-					failAutomationBusy(sess, 'verifyRodSelf', error);
-					slog(sess.swapId, 'Own ROD verify pending: ' + (error && error.message || error) + backoffNote(sess, 'verifyRodSelf'));
+					failAutomationBusy(sess, 'verifyAssetSelf', error);
+					slog(sess.swapId, 'Own ' + assetChainOf(sess) + ' verify pending: ' + (error && error.message || error) + backoffNote(sess, 'verifyAssetSelf'));
 				});
 				return true;
 			}
 			/* Verify Buyer's LTC funding (must match his planned txid) → READY */
-			if (sess.plannedAltFunding && !confirmedEnough(altFunding, terms.altConfirmations)) {
-				if (!markAutomationBusy(sess, 'verifyAlt')) return true;
-				verifyFunding(sess, altChainOf(sess), sess.plannedAltFunding.txid).then(function (evidence) {
+			if (sess.plannedPaymentFunding && !confirmedEnough(paymentFunding, terms.paymentConfirmations)) {
+				if (!markAutomationBusy(sess, 'verifyPayment')) return true;
+				verifyFunding(sess, paymentChainOf(sess), sess.plannedPaymentFunding.txid).then(function (evidence) {
 					var live = ENGINE.restoreLive(sess.swapId) || sess;
-					SWAP.safeAdvance(live, 'BUYER_ALT_FUNDED', '' + altChainOf(live) + ' funding verified on-chain');
+					SWAP.safeAdvance(live, 'PAYMENT_FUNDED', '' + paymentChainOf(live) + ' funding verified on-chain');
 					var confs = evidence.confirmations || 0;
-					if (confs >= terms.altConfirmations) {
-						SWAP.safeAdvance(live, 'READY', altChainOf(live) + ' funding reached ' + terms.altConfirmations + ' confirmation(s)');
+					if (confs >= terms.paymentConfirmations) {
+						SWAP.safeAdvance(live, 'READY', paymentChainOf(live) + ' funding reached ' + terms.paymentConfirmations + ' confirmation(s)');
 					}
 					ENGINE.saveLive(live);
-					slog(live.swapId, '✓ ' + altChainOf(live) + ' funding verified · ' + confs + '/' + terms.altConfirmations + ' confs');
-					clearAutomationBusy(sess, 'verifyAlt');
+					slog(live.swapId, '✓ ' + paymentChainOf(live) + ' funding verified · ' + confs + '/' + terms.paymentConfirmations + ' confs');
+					clearAutomationBusy(sess, 'verifyPayment');
 					/* Only advance immediately when target reached; otherwise let the
 					   30 s liveness tick re-check to avoid hammering the explorer API. */
-					if (confs >= terms.altConfirmations) autoContinueSwap(live);
+					if (confs >= terms.paymentConfirmations) autoContinueSwap(live);
 				}).fail(function (error) {
-					failAutomationBusy(sess, 'verifyAlt', error);
-					slog(sess.swapId, '' + altChainOf(sess) + ' funding verify pending: ' + (error && error.message || error) + backoffNote(sess, 'verifyAlt'));
+					failAutomationBusy(sess, 'verifyPayment', error);
+					slog(sess.swapId, '' + paymentChainOf(sess) + ' funding verify pending: ' + (error && error.message || error) + backoffNote(sess, 'verifyPayment'));
 				});
 				return true;
 			}
-			if (confirmedEnough(altFunding, terms.altConfirmations) && stateRank(sess.state) < stateRank('READY')) {
+			if (confirmedEnough(paymentFunding, terms.paymentConfirmations) && stateRank(sess.state) < stateRank('READY')) {
 				SWAP.safeAdvance(sess, 'READY', 'Both fundings confirmed');
 				ENGINE.saveLive(sess);
 				return true;
@@ -2209,73 +2227,73 @@ $(function () {
 			return false;
 		}
 		if (sess.role === 'buyer') {
-			/* Verify Seller's ROD funding (gate: on-chain txid == planned txid,
+			/* Verify Seller's asset funding (gate: on-chain txid == planned txid,
 			   confirmations >= agreed) before committing any alt coin. */
-			if (!(altFunding && altFunding.txid)) {
-				if (!sess.plannedRodFunding) return false;
-				var rodOk = confirmedEnough(rodFunding, terms.rodConfirmations) && rodFunding.txid === sess.plannedRodFunding.txid;
+			if (!(paymentFunding && paymentFunding.txid)) {
+				if (!sess.plannedAssetFunding) return false;
+				var rodOk = confirmedEnough(assetFunding, terms.assetConfirmations) && assetFunding.txid === sess.plannedAssetFunding.txid;
 				if (!rodOk) {
-					if (!markAutomationBusy(sess, 'verifyRod')) return true;
-					verifyFunding(sess, 'ROD', sess.plannedRodFunding.txid).then(function (evidence) {
+					if (!markAutomationBusy(sess, 'verifyAsset')) return true;
+					verifyFunding(sess, assetChainOf(sess), sess.plannedAssetFunding.txid).then(function (evidence) {
 						var live = ENGINE.restoreLive(sess.swapId) || sess;
-						SWAP.safeAdvance(live, 'SELLER_ROD_FUNDED', 'ROD funding verified on-chain');
+						SWAP.safeAdvance(live, 'ASSET_FUNDED', 'asset funding verified on-chain');
 						ENGINE.saveLive(live);
 						var confs = evidence.confirmations || 0;
-						slog(live.swapId, '✓ ROD funding verified · ' + confs + '/' + terms.rodConfirmations + ' confs · txid matches planned');
-						clearAutomationBusy(sess, 'verifyRod');
+						slog(live.swapId, '✓ asset funding verified · ' + confs + '/' + terms.assetConfirmations + ' confs · txid matches planned');
+						clearAutomationBusy(sess, 'verifyAsset');
 						/* Only advance immediately when target reached (proceed to fund ALT);
 						   otherwise let the 30 s liveness tick re-check. */
-						if (confs >= terms.rodConfirmations) autoContinueSwap(live);
+						if (confs >= terms.assetConfirmations) autoContinueSwap(live);
 					}).fail(function (error) {
-						failAutomationBusy(sess, 'verifyRod', error);
-						slog(sess.swapId, 'ROD funding verify pending: ' + (error && error.message || error) + backoffNote(sess, 'verifyRod'));
+						failAutomationBusy(sess, 'verifyAsset', error);
+						slog(sess.swapId, 'asset funding verify pending: ' + (error && error.message || error) + backoffNote(sess, 'verifyAsset'));
 					});
 					return true;
 				}
 				/* Adaptor signature sanity re-check against the REAL funding */
-				if (!sess.remoteRodAdaptorSignature) { slog(sess.swapId, 'Missing Seller ROD adaptor signature; not funding ' + altChainOf(sess)); return true; }
-				if (!markAutomationBusy(sess, 'fundAlt')) return true;
-				ENGINE.broadcastTx(altChainOf(sess), sess.plannedAltFunding.txhex).then(function (response) {
+				if (!sess.remoteAssetAdaptorSignature) { slog(sess.swapId, 'Missing Seller ' + assetChainOf(sess) + ' adaptor signature; not funding ' + paymentChainOf(sess)); return true; }
+				if (!markAutomationBusy(sess, 'fundPayment')) return true;
+				ENGINE.broadcastTx(paymentChainOf(sess), sess.plannedPaymentFunding.txhex).then(function (response) {
 					var live = ENGINE.restoreLive(sess.swapId) || sess;
 					live.execution = live.execution || {};
-					live.execution.altFunding = {
-						txid: (response && response.txid) || live.plannedAltFunding.txid, vout: 0,
-						value: live.plannedAltFunding.value, amount: live.plannedAltFunding.amount,
+					live.execution.paymentFunding = {
+						txid: (response && response.txid) || live.plannedPaymentFunding.txid, vout: 0,
+						value: live.plannedPaymentFunding.value, amount: live.plannedPaymentFunding.amount,
 						broadcastAt: new Date().toISOString()
 					};
-					SWAP.safeAdvance(live, 'BUYER_ALT_FUNDED', '' + altChainOf(live) + ' funding broadcast');
+					SWAP.safeAdvance(live, 'PAYMENT_FUNDED', '' + paymentChainOf(live) + ' funding broadcast');
 					ENGINE.saveLive(live);
-					publish(live, 'swap_alt_funded', { funding: { txid: live.execution.altFunding.txid, vout: 0, value: live.execution.altFunding.value, amount: live.execution.altFunding.amount } });
-					slog(live.swapId, '→ ' + altChainOf(live) + ' funding broadcast ' + live.execution.altFunding.txid);
-					clearAutomationBusy(sess, 'fundAlt');
+					publish(live, 'swap_payment_funded', { funding: { txid: live.execution.paymentFunding.txid, vout: 0, value: live.execution.paymentFunding.value, amount: live.execution.paymentFunding.amount } });
+					slog(live.swapId, '→ ' + paymentChainOf(live) + ' funding broadcast ' + live.execution.paymentFunding.txid);
+					clearAutomationBusy(sess, 'fundPayment');
 					refreshSwaps(); showActiveSwap(live.swapId);
 					autoContinueSwap(live);
 				}).fail(function (error) {
-					failAutomationBusy(sess, 'fundAlt', error);
-					slog(sess.swapId, '' + altChainOf(sess) + ' funding broadcast blocked: ' + (error && error.message || error) + backoffNote(sess, 'fundAlt'));
+					failAutomationBusy(sess, 'fundPayment', error);
+					slog(sess.swapId, '' + paymentChainOf(sess) + ' funding broadcast blocked: ' + (error && error.message || error) + backoffNote(sess, 'fundPayment'));
 				});
 				return true;
 			}
 			/* Self-verify own LTC funding until confirmation target reached */
-			if (altFunding.txid && !confirmedEnough(altFunding, terms.altConfirmations)) {
-				if (!markAutomationBusy(sess, 'verifyAltSelf')) return true;
-				verifyFunding(sess, altChainOf(sess), sess.plannedAltFunding.txid).then(function (evidence) {
+			if (paymentFunding.txid && !confirmedEnough(paymentFunding, terms.paymentConfirmations)) {
+				if (!markAutomationBusy(sess, 'verifyPaymentSelf')) return true;
+				verifyFunding(sess, paymentChainOf(sess), sess.plannedPaymentFunding.txid).then(function (evidence) {
 					var live = ENGINE.restoreLive(sess.swapId) || sess;
 					var cleanEvidence = $.extend({}, evidence); delete cleanEvidence.verifiedLocally;
-					publish(live, 'swap_alt_funded', { funding: cleanEvidence });
+					publish(live, 'swap_payment_funded', { funding: cleanEvidence });
 					var confs = evidence.confirmations || 0;
-					if (confs >= terms.altConfirmations) {
-						SWAP.safeAdvance(live, 'READY', altChainOf(live) + ' funding reached ' + terms.altConfirmations + ' confirmation(s)');
+					if (confs >= terms.paymentConfirmations) {
+						SWAP.safeAdvance(live, 'READY', paymentChainOf(live) + ' funding reached ' + terms.paymentConfirmations + ' confirmation(s)');
 						ENGINE.saveLive(live);
 					}
-					slog(live.swapId, '✓ Own ' + altChainOf(live) + ' funding verified · ' + confs + '/' + terms.altConfirmations + ' confs');
-					clearAutomationBusy(sess, 'verifyAltSelf');
+					slog(live.swapId, '✓ Own ' + paymentChainOf(live) + ' funding verified · ' + confs + '/' + terms.paymentConfirmations + ' confs');
+					clearAutomationBusy(sess, 'verifyPaymentSelf');
 					/* Only advance immediately when target reached; otherwise let the
 					   30 s liveness tick re-check to avoid hammering the explorer API. */
-					if (confs >= terms.altConfirmations) autoContinueSwap(live);
+					if (confs >= terms.paymentConfirmations) autoContinueSwap(live);
 				}).fail(function (error) {
-					failAutomationBusy(sess, 'verifyAltSelf', error);
-					slog(sess.swapId, 'Own ' + altChainOf(sess) + ' verify pending: ' + (error && error.message || error) + backoffNote(sess, 'verifyAltSelf'));
+					failAutomationBusy(sess, 'verifyPaymentSelf', error);
+					slog(sess.swapId, 'Own ' + paymentChainOf(sess) + ' verify pending: ' + (error && error.message || error) + backoffNote(sess, 'verifyPaymentSelf'));
 				});
 				return true;
 			}
@@ -2288,7 +2306,7 @@ $(function () {
 	   Seller completes Buyer's alt-leg adaptor signature with y and broadcasts the
 	   alt claim (revealing y in the real signature). Buyer recovers y from that
 	   signature — via Nostr evidence or directly from the chain — completes
-	   Seller's ROD adaptor signature and claims ROD. */
+	   Seller's asset adaptor signature and claims ROD. */
 	function errorString(e) {
 		if (!e) return 'unknown error';
 		if (typeof e === 'string') return e;
@@ -2302,113 +2320,113 @@ $(function () {
 		var terms = sess.terms;
 		var execution = sess.execution || {};
 		if (sess.role === 'seller') {
-			/* After LTC claim, poll ROD funding outpoint to detect Buyer's
-			   ROD claim on-chain — the relay swap_complete message may be
+			/* After LTC claim, poll asset funding outpoint to detect Buyer's
+			   asset claim on-chain — the relay swap_complete message may be
 			   lost or rate-limited, so chain is the authoritative fallback. */
-			if (execution.altClaim && execution.altClaim.txid) {
+			if (execution.paymentClaim && execution.paymentClaim.txid) {
 				if (sess.state === 'COMPLETE') return false;
-				if (!markAutomationBusy(sess, 'pollRodSpend')) return true;
-				ENGINE.getOutspend('ROD', sess.plannedRodFunding.txid, 0).then(function (outspend) {
+				if (!markAutomationBusy(sess, 'pollAssetSpend')) return true;
+				ENGINE.getOutspend(assetChainOf(sess), sess.plannedAssetFunding.txid, 0).then(function (outspend) {
 					if (!outspend || !outspend.spent || !outspend.txid) {
-						clearAutomationBusy(sess, 'pollRodSpend');
+						clearAutomationBusy(sess, 'pollAssetSpend');
 						return;
 					}
 					var live = ENGINE.restoreLive(sess.swapId) || sess;
 					live.execution = live.execution || {};
-					live.execution.rodClaim = $.extend({}, live.execution.rodClaim || {}, { txid: outspend.txid });
-					SWAP.safeAdvance(live, 'ROD_CLAIMED', 'ROD claim detected on-chain');
+					live.execution.assetClaim = $.extend({}, live.execution.assetClaim || {}, { txid: outspend.txid });
+					SWAP.safeAdvance(live, 'ASSET_CLAIMED', 'asset claim detected on-chain');
 					SWAP.safeAdvance(live, 'COMPLETE', 'Swap complete');
 					ENGINE.saveLive(live);
 					ENGINE.recordTrade(live);
-					slog(live.swapId, '✓ COMPLETE — Buyer\'s ROD claim detected on-chain ' + short(outspend.txid));
-					clearAutomationBusy(sess, 'pollRodSpend');
+					slog(live.swapId, '✓ COMPLETE — Buyer\'s asset claim detected on-chain ' + short(outspend.txid));
+					clearAutomationBusy(sess, 'pollAssetSpend');
 					refreshSwaps(); showActiveSwap(live.swapId); refreshHistory();
 				}).fail(function (err) {
-					failAutomationBusy(sess, 'pollRodSpend', err);
-					slog(sess.swapId, 'ROD outpoint poll failed: ' + errorString(err) + backoffNote(sess, 'pollRodSpend'));
+					failAutomationBusy(sess, 'pollAssetSpend', err);
+					slog(sess.swapId, assetChainOf(sess) + ' outpoint poll failed: ' + errorString(err) + backoffNote(sess, 'pollAssetSpend'));
 				});
 				return true;
 			}
-			if (!confirmedEnough(execution.altFunding, terms.altConfirmations)) return false;
-			if (!sess.remoteAltAdaptorSignature || !sess.adaptorSecret) return false;
-			if (!markAutomationBusy(sess, 'claimAlt')) return true;
+			if (!confirmedEnough(execution.paymentFunding, terms.paymentConfirmations)) return false;
+			if (!sess.remotePaymentAdaptorSignature || !sess.adaptorSecret) return false;
+			if (!markAutomationBusy(sess, 'claimPayment')) return true;
 			ENGINE.getRodHeight().then(function (rodHeight) {
 				if (rodHeight < terms.releaseRodHeight) {
-					slog(sess.swapId, '' + altChainOf(sess) + ' claim waiting for release height ' + terms.releaseRodHeight + ' (current ' + rodHeight + ')');
-					clearAutomationBusy(sess, 'claimAlt');
+					slog(sess.swapId, '' + paymentChainOf(sess) + ' claim waiting for release height ' + terms.releaseRodHeight + ' (current ' + rodHeight + ')');
+					clearAutomationBusy(sess, 'claimPayment');
 					return;
 				}
 				var live = ENGINE.restoreLive(sess.swapId) || sess;
 				try {
-					claimAltAsSeller(live).then(function (evidence) {
+					claimPaymentAsSeller(live).then(function (evidence) {
 						var updated = ENGINE.restoreLive(live.swapId) || live;
-						SWAP.safeAdvance(updated, 'ALT_CLAIMED', '' + altChainOf(updated) + ' claimed with completed adaptor signature');
+						SWAP.safeAdvance(updated, 'PAYMENT_CLAIMED', '' + paymentChainOf(updated) + ' claimed with completed adaptor signature');
 						ENGINE.saveLive(updated);
-						slog(updated.swapId, '✓ ' + altChainOf(updated) + ' claimed ' + evidence.txid + ' — adaptor secret is now revealed on-chain');
-						clearAutomationBusy(sess, 'claimAlt');
+						slog(updated.swapId, '✓ ' + paymentChainOf(updated) + ' claimed ' + evidence.txid + ' — adaptor secret is now revealed on-chain');
+						clearAutomationBusy(sess, 'claimPayment');
 						refreshSwaps(); showActiveSwap(updated.swapId);
 					}).fail(function (error) {
-						failAutomationBusy(sess, 'claimAlt', error);
-						slog(sess.swapId, '' + altChainOf(sess) + ' claim blocked: ' + errorString(error) + backoffNote(sess, 'claimAlt'));
+						failAutomationBusy(sess, 'claimPayment', error);
+						slog(sess.swapId, '' + paymentChainOf(sess) + ' claim blocked: ' + errorString(error) + backoffNote(sess, 'claimPayment'));
 					});
 				} catch (claimError) {
-					clearAutomationBusy(sess, 'claimAlt');
-					slog(sess.swapId, '' + altChainOf(sess) + ' claim blocked: ' + errorString(claimError));
+					clearAutomationBusy(sess, 'claimPayment');
+					slog(sess.swapId, '' + paymentChainOf(sess) + ' claim blocked: ' + errorString(claimError));
 				}
 			}, function (heightError) {
-				clearAutomationBusy(sess, 'claimAlt');
+				clearAutomationBusy(sess, 'claimPayment');
 				slog(sess.swapId, 'ROD height check failed: ' + errorString(heightError));
 			});
 			return true;
 		}
 		if (sess.role === 'buyer') {
 			/* Recover the adaptor secret from the real LTC claim signature */
-			if (!sess.recoveredAdaptorSecret && sess.localAltAdaptorSignature && execution.altFunding && execution.altFunding.txid) {
-				if (execution.altClaim && (execution.altClaim.completedSigHex || execution.altClaim.txhex)) {
+			if (!sess.recoveredAdaptorSecret && sess.localPaymentAdaptorSignature && execution.paymentFunding && execution.paymentFunding.txid) {
+				if (execution.paymentClaim && (execution.paymentClaim.completedSigHex || execution.paymentClaim.txhex)) {
 					if (tryRecoverFromEvidence(sess)) { autoContinueSwap(ENGINE.restoreLive(sess.swapId) || sess); }
 					return true;
 				}
 				/* Chain fallback: poll the LTC funding outpoint spend status so
 				   recovery works even if every relay drops the notification. */
-				if (!markAutomationBusy(sess, 'pollAltSpend')) return true;
-				ENGINE.getOutspend(altChainOf(sess), sess.plannedAltFunding.txid, 0).then(function (outspend) {
+				if (!markAutomationBusy(sess, 'pollPaymentSpend')) return true;
+				ENGINE.getOutspend(paymentChainOf(sess), sess.plannedPaymentFunding.txid, 0).then(function (outspend) {
 					if (!outspend || !outspend.spent || !outspend.txid) {
-						clearAutomationBusy(sess, 'pollAltSpend');
+						clearAutomationBusy(sess, 'pollPaymentSpend');
 						return;
 					}
-					return ENGINE.getTxHex(altChainOf(sess), outspend.txid).then(function (txhex) {
+					return ENGINE.getTxHex(paymentChainOf(sess), outspend.txid).then(function (txhex) {
 						var live = ENGINE.restoreLive(sess.swapId) || sess;
 						live.execution = live.execution || {};
-						live.execution.altClaim = $.extend({}, live.execution.altClaim || {}, { txid: outspend.txid, txhex: txhex });
+						live.execution.paymentClaim = $.extend({}, live.execution.paymentClaim || {}, { txid: outspend.txid, txhex: txhex });
 						ENGINE.saveLive(live);
-						slog(live.swapId, '← ' + altChainOf(live) + ' claim discovered on-chain ' + short(outspend.txid));
-						clearAutomationBusy(sess, 'pollAltSpend');
+						slog(live.swapId, '← ' + paymentChainOf(live) + ' claim discovered on-chain ' + short(outspend.txid));
+						clearAutomationBusy(sess, 'pollPaymentSpend');
 						if (tryRecoverFromEvidence(live)) autoContinueSwap(ENGINE.restoreLive(live.swapId) || live);
 					});
-				}).fail(function (err) { failAutomationBusy(sess, 'pollAltSpend', err); });
+				}).fail(function (err) { failAutomationBusy(sess, 'pollPaymentSpend', err); });
 				return true;
 			}
-			/* Claim ROD with the recovered secret */
-			if (sess.recoveredAdaptorSecret && sess.remoteRodAdaptorSignature && !(execution.rodClaim && execution.rodClaim.txid)) {
-				if (!markAutomationBusy(sess, 'claimRod')) return true;
+			/* Claim the asset with the recovered secret */
+			if (sess.recoveredAdaptorSecret && sess.remoteAssetAdaptorSignature && !(execution.assetClaim && execution.assetClaim.txid)) {
+				if (!markAutomationBusy(sess, 'claimAsset')) return true;
 				try {
-					claimRodAsBuyer(sess).then(function (evidence) {
+					claimAssetAsBuyer(sess).then(function (evidence) {
 						var live = ENGINE.restoreLive(sess.swapId) || sess;
-						SWAP.safeAdvance(live, 'ROD_CLAIMED', 'ROD claimed with completed adaptor signature');
+						SWAP.safeAdvance(live, 'ASSET_CLAIMED', 'asset claimed with completed adaptor signature');
 						SWAP.safeAdvance(live, 'COMPLETE', 'Swap complete');
 						ENGINE.saveLive(live);
 						ENGINE.recordTrade(live);
-						publish(live, 'swap_complete', { rodClaim: { txid: evidence.txid } });
-						slog(live.swapId, '✓ COMPLETE — ROD claimed ' + evidence.txid);
-						clearAutomationBusy(sess, 'claimRod');
+						publish(live, 'swap_complete', { assetClaim: { txid: evidence.txid } });
+						slog(live.swapId, '✓ COMPLETE — asset claimed ' + evidence.txid);
+						clearAutomationBusy(sess, 'claimAsset');
 						refreshSwaps(); showActiveSwap(live.swapId); refreshHistory();
 					}).fail(function (error) {
-						failAutomationBusy(sess, 'claimRod', error);
-						slog(sess.swapId, 'ROD claim blocked: ' + errorString(error) + backoffNote(sess, 'claimRod'));
+						failAutomationBusy(sess, 'claimAsset', error);
+						slog(sess.swapId, 'asset claim blocked: ' + errorString(error) + backoffNote(sess, 'claimAsset'));
 					});
-				} catch (rodClaimError) {
-					clearAutomationBusy(sess, 'claimRod');
-					slog(sess.swapId, 'ROD claim blocked: ' + errorString(rodClaimError));
+				} catch (assetClaimError) {
+					clearAutomationBusy(sess, 'claimAsset');
+					slog(sess.swapId, 'asset claim blocked: ' + errorString(assetClaimError));
 				}
 				return true;
 			}
@@ -2422,8 +2440,8 @@ $(function () {
 	   against the adaptor point (yG == Y, or the low-S negation), so a forged
 	   signature cannot inject a bogus secret. */
 	function tryRecoverFromEvidence(sess) {
-		if (sess.role !== 'buyer' || sess.recoveredAdaptorSecret || !sess.localAltAdaptorSignature) return false;
-		var evidence = sess.execution && sess.execution.altClaim;
+		if (sess.role !== 'buyer' || sess.recoveredAdaptorSecret || !sess.localPaymentAdaptorSignature) return false;
+		var evidence = sess.execution && sess.execution.paymentClaim;
 		if (!evidence) return false;
 		var candidates = [];
 		if (evidence.completedSigHex) candidates.push(evidence.completedSigHex);
@@ -2437,13 +2455,13 @@ $(function () {
 		}
 		for (var c = 0; c < candidates.length; c++) {
 			try {
-				var recovered = ENGINE.recoverSecret(Crypto.util.hexToBytes(sess.localAltAdaptorSignature), candidates[c], sess.adaptorPoint);
+				var recovered = ENGINE.recoverSecret(Crypto.util.hexToBytes(sess.localPaymentAdaptorSignature), candidates[c], sess.adaptorPoint);
 				sess.recoveredAdaptorSecret = recovered;
-				SWAP.safeAdvance(sess, 'ALT_CLAIMED', '' + altChainOf(sess) + ' claim observed');
-				SWAP.safeAdvance(sess, 'SECRET_RECOVERED', 'Adaptor secret recovered from the real ' + altChainOf(sess) + ' claim signature');
+				SWAP.safeAdvance(sess, 'PAYMENT_CLAIMED', '' + paymentChainOf(sess) + ' claim observed');
+				SWAP.safeAdvance(sess, 'SECRET_RECOVERED', 'Adaptor secret recovered from the real ' + paymentChainOf(sess) + ' claim signature');
 				ENGINE.saveLive(sess);
 				publish(sess, 'swap_secret_recovered', { recovered: true });
-				slog(sess.swapId, '✓ Adaptor secret recovered from ' + altChainOf(sess) + ' claim signature (verified against adaptor point)');
+				slog(sess.swapId, '✓ Adaptor secret recovered from ' + paymentChainOf(sess) + ' claim signature (verified against adaptor point)');
 				refreshSwaps();
 				return true;
 			} catch (recoverError) { /* try next candidate */ }
@@ -2460,77 +2478,77 @@ $(function () {
 		var terms = sess.terms;
 		var execution = sess.execution || {};
 		if (sess.state === 'COMPLETE') return;
-		if (sess.role === 'seller' && sess.rodRefund && sess.rodRefund.signedHex &&
-			execution.rodFunding && execution.rodFunding.txid &&
-			!(execution.altClaim && execution.altClaim.txid) &&
-			!(execution.rodRefund && execution.rodRefund.txid)) {
-			if (!markAutomationBusy(sess, 'refundRod')) return;
-			ENGINE.getRodHeight().then(function (rodHeight) {
-				if (rodHeight < terms.refundRodHeight) {
-					clearAutomationBusy(sess, 'refundRod');
+		if (sess.role === 'seller' && sess.assetRefund && sess.assetRefund.signedHex &&
+			execution.assetFunding && execution.assetFunding.txid &&
+			!(execution.paymentClaim && execution.paymentClaim.txid) &&
+			!(execution.assetRefund && execution.assetRefund.txid)) {
+			if (!markAutomationBusy(sess, 'refundAsset')) return;
+			ENGINE.getChainHeight(assetChainOf(sess)).then(function (rodHeight) {
+				if (rodHeight < terms.assetRefundLockHeight) {
+					clearAutomationBusy(sess, 'refundAsset');
 					return;
 				}
-				return ENGINE.isOutpointUnspent('ROD', terms.rodFunding.multisigAddress, sess.plannedRodFunding.txid, 0).then(function (status) {
+				return ENGINE.isOutpointUnspent(assetChainOf(sess), terms.assetFunding.multisigAddress, sess.plannedAssetFunding.txid, 0).then(function (status) {
 					if (!status.unspent) {
-						clearAutomationBusy(sess, 'refundRod');
-						slog(sess.swapId, 'ROD refund not needed: funding output already spent');
+						clearAutomationBusy(sess, 'refundAsset');
+						slog(sess.swapId, 'asset refund not needed: funding output already spent');
 						return;
 					}
-					return ENGINE.broadcastTx('ROD', sess.rodRefund.signedHex).then(function (response) {
+					return ENGINE.broadcastTx(assetChainOf(sess), sess.assetRefund.signedHex).then(function (response) {
 						var live = ENGINE.restoreLive(sess.swapId) || sess;
 						live.execution = live.execution || {};
-						live.execution.rodRefund = { txid: (response && response.txid) || txidOfHex(live.rodRefund.signedHex), txhex: live.rodRefund.signedHex, broadcastAt: new Date().toISOString() };
-						SWAP.markRefundState(live, 'ROD_REFUND_BROADCAST', 'Timelocked ROD refund broadcast at height ' + rodHeight);
-						SWAP.markRefundState(live, (execution.altFunding && execution.altFunding.txid) ? 'ROD_REFUNDED' : 'REFUNDED', 'ROD refund accepted by network');
+						live.execution.assetRefund = { txid: (response && response.txid) || txidOfHex(live.assetRefund.signedHex), txhex: live.assetRefund.signedHex, broadcastAt: new Date().toISOString() };
+						SWAP.markRefundState(live, 'ASSET_REFUND_BROADCAST', 'Timelocked asset refund broadcast at height ' + rodHeight);
+						SWAP.markRefundState(live, (execution.paymentFunding && execution.paymentFunding.txid) ? 'ASSET_REFUNDED' : 'REFUNDED', 'asset refund accepted by network');
 						ENGINE.saveLive(live);
-						publish(live, 'swap_rod_refund_broadcast', { txid: live.execution.rodRefund.txid });
-						if (live.state === 'REFUNDED') publish(live, 'swap_refunded', { chain: 'ROD' });
-						slog(live.swapId, '✓ ROD refund broadcast ' + live.execution.rodRefund.txid + ' — funds returned to ' + terms.sellerRodRefundAddress);
-						clearAutomationBusy(sess, 'refundRod');
+						publish(live, 'swap_asset_refund_broadcast', { txid: live.execution.assetRefund.txid });
+						if (live.state === 'REFUNDED') publish(live, 'swap_refunded', { chain: assetChainOf(live) });
+						slog(live.swapId, '✓ asset refund broadcast ' + live.execution.assetRefund.txid + ' — funds returned to ' + terms.sellerAssetRefundAddress);
+						clearAutomationBusy(sess, 'refundAsset');
 						refreshSwaps(); showActiveSwap(live.swapId);
 					});
 				});
 			}).fail(function (error) {
-				failAutomationBusy(sess, 'refundRod', error);
-				slog(sess.swapId, 'ROD refund check failed: ' + (error && error.message || error) + backoffNote(sess, 'refundRod'));
+				failAutomationBusy(sess, 'refundAsset', error);
+				slog(sess.swapId, 'asset refund check failed: ' + (error && error.message || error) + backoffNote(sess, 'refundAsset'));
 			});
 			return;
 		}
-		if (sess.role === 'buyer' && sess.altRefund && sess.altRefund.signedHex &&
-			execution.altFunding && execution.altFunding.txid &&
+		if (sess.role === 'buyer' && sess.paymentRefund && sess.paymentRefund.signedHex &&
+			execution.paymentFunding && execution.paymentFunding.txid &&
 			!sess.recoveredAdaptorSecret &&
-			!(execution.altRefund && execution.altRefund.txid)) {
-			if (!markAutomationBusy(sess, 'refundAlt')) return;
-			ENGINE.getAltHeight(altChainOf(sess)).then(function (altHeight) {
-				if (altHeight < terms.altRefundLockHeight) {
-					clearAutomationBusy(sess, 'refundAlt');
+			!(execution.paymentRefund && execution.paymentRefund.txid)) {
+			if (!markAutomationBusy(sess, 'refundPayment')) return;
+			ENGINE.getChainHeight(paymentChainOf(sess)).then(function (altHeight) {
+				if (altHeight < terms.paymentRefundLockHeight) {
+					clearAutomationBusy(sess, 'refundPayment');
 					return;
 				}
-				return ENGINE.isOutpointUnspent(altChainOf(sess), terms.altFunding.multisigAddress, sess.plannedAltFunding.txid, 0).then(function (status) {
+				return ENGINE.isOutpointUnspent(paymentChainOf(sess), terms.paymentFunding.multisigAddress, sess.plannedPaymentFunding.txid, 0).then(function (status) {
 					if (!status.unspent) {
 						/* Spent but no secret yet → Seller claimed; recovery path
 						   will pick it up via outspend polling. */
-						clearAutomationBusy(sess, 'refundAlt');
-						slog(sess.swapId, altChainOf(sess) + ' refund skipped: funding output spent (checking for Seller claim)');
+						clearAutomationBusy(sess, 'refundPayment');
+						slog(sess.swapId, paymentChainOf(sess) + ' refund skipped: funding output spent (checking for Seller claim)');
 						autoContinueSwap(ENGINE.restoreLive(sess.swapId) || sess);
 						return;
 					}
-					return ENGINE.broadcastTx(altChainOf(sess), sess.altRefund.signedHex).then(function (response) {
+					return ENGINE.broadcastTx(paymentChainOf(sess), sess.paymentRefund.signedHex).then(function (response) {
 						var live = ENGINE.restoreLive(sess.swapId) || sess;
 						live.execution = live.execution || {};
-						live.execution.altRefund = { txid: (response && response.txid) || txidOfHex(live.altRefund.signedHex), txhex: live.altRefund.signedHex, broadcastAt: new Date().toISOString() };
-						SWAP.markRefundState(live, 'ALT_REFUND_BROADCAST', 'Timelocked ' + altChainOf(live) + ' refund broadcast at height ' + altHeight);
-						SWAP.markRefundState(live, 'ALT_REFUNDED', altChainOf(live) + ' refund accepted by network');
+						live.execution.paymentRefund = { txid: (response && response.txid) || txidOfHex(live.paymentRefund.signedHex), txhex: live.paymentRefund.signedHex, broadcastAt: new Date().toISOString() };
+						SWAP.markRefundState(live, 'PAYMENT_REFUND_BROADCAST', 'Timelocked ' + paymentChainOf(live) + ' refund broadcast at height ' + altHeight);
+						SWAP.markRefundState(live, 'PAYMENT_REFUNDED', paymentChainOf(live) + ' refund accepted by network');
 						ENGINE.saveLive(live);
-						publish(live, 'swap_alt_refund_broadcast', { txid: live.execution.altRefund.txid });
-						slog(live.swapId, '✓ ' + altChainOf(live) + ' refund broadcast ' + live.execution.altRefund.txid + ' — funds returned to ' + terms.buyerAltRefundAddress);
-						clearAutomationBusy(sess, 'refundAlt');
+						publish(live, 'swap_payment_refund_broadcast', { txid: live.execution.paymentRefund.txid });
+						slog(live.swapId, '✓ ' + paymentChainOf(live) + ' refund broadcast ' + live.execution.paymentRefund.txid + ' — funds returned to ' + terms.buyerPaymentRefundAddress);
+						clearAutomationBusy(sess, 'refundPayment');
 						refreshSwaps(); showActiveSwap(live.swapId);
 					});
 				});
 			}).fail(function (error) {
-				failAutomationBusy(sess, 'refundAlt', error);
-				slog(sess.swapId, '' + altChainOf(sess) + ' refund check failed: ' + (error && error.message || error) + backoffNote(sess, 'refundAlt'));
+				failAutomationBusy(sess, 'refundPayment', error);
+				slog(sess.swapId, '' + paymentChainOf(sess) + ' refund check failed: ' + (error && error.message || error) + backoffNote(sess, 'refundPayment'));
 			});
 		}
 	}
@@ -2614,26 +2632,27 @@ $(function () {
 	   signature COMPLETED with the adaptor secret y. Broadcasting this is the
 	   act that reveals y to Buyer (he recovers it from the completed signature
 	   in the real transaction). */
-	function claimAltAsSeller(session) {
-		if (session.role !== 'seller') throw new Error('Only Seller claims ' + altChainOf(session));
+	function claimPaymentAsSeller(session) {
+		if (session.role !== 'seller') throw new Error('Only Seller claims ' + paymentChainOf(session));
 		if (!session.adaptorSecret) throw new Error('Adaptor secret unavailable; reopen the wallet that created this swap');
-		if (!session.remoteAltAdaptorSignature) throw new Error('Buyer\'s ' + altChainOf(session) + ' adaptor signature has not arrived yet');
-		var tx = claimTxFor(session, altChainOf(session));
-		var sellerSig = ENGINE.signClaimTx(altChainOf(session), tx, getLocalChildWif(session, altChainOf(session)));
-		var completedBuyerSig = ENGINE.completeSig(Crypto.util.hexToBytes(session.remoteAltAdaptorSignature), session.adaptorSecret);
-		return broadcastClaim(session, altChainOf(session), [sellerSig, completedBuyerSig], 'altClaim', 'swap_alt_claimed', { completedSigHex: completedBuyerSig });
+		if (!session.remotePaymentAdaptorSignature) throw new Error('Buyer\'s ' + paymentChainOf(session) + ' adaptor signature has not arrived yet');
+		var tx = claimTxFor(session, paymentChainOf(session));
+		var sellerSig = ENGINE.signClaimTx(paymentChainOf(session), tx, getLocalChildWif(session, paymentChainOf(session)));
+		var completedBuyerSig = ENGINE.completeSig(Crypto.util.hexToBytes(session.remotePaymentAdaptorSignature), session.adaptorSecret);
+		return broadcastClaim(session, paymentChainOf(session), [sellerSig, completedBuyerSig], 'paymentClaim', 'swap_payment_claimed', { completedSigHex: completedBuyerSig });
 	}
 
-	/* Buyer's ROD claim: Seller's adaptor signature completed with the RECOVERED
+	/* Buyer's asset claim: Seller's adaptor signature completed with the RECOVERED
 	   secret + his own fresh normal signature. */
-	function claimRodAsBuyer(session) {
-		if (session.role !== 'buyer') throw new Error('Only Buyer claims ROD');
-		if (!session.recoveredAdaptorSecret) throw new Error('Adaptor secret has not been recovered from the ' + altChainOf(session) + ' claim yet');
-		if (!session.remoteRodAdaptorSignature) throw new Error('Seller\'s ROD adaptor signature has not arrived yet');
-		var tx = claimTxFor(session, 'ROD');
-		var buyerSig = ENGINE.signClaimTx('ROD', tx, getLocalChildWif(session, 'ROD'));
-		var completedSellerSig = ENGINE.completeSig(Crypto.util.hexToBytes(session.remoteRodAdaptorSignature), session.recoveredAdaptorSecret);
-		return broadcastClaim(session, 'ROD', [completedSellerSig, buyerSig], 'rodClaim', 'swap_rod_claimed', { completedSigHex: completedSellerSig });
+	function claimAssetAsBuyer(session) {
+		var assetCode = assetChainOf(session);
+		if (session.role !== 'buyer') throw new Error('Only Buyer claims ' + assetCode);
+		if (!session.recoveredAdaptorSecret) throw new Error('Adaptor secret has not been recovered from the ' + paymentChainOf(session) + ' claim yet');
+		if (!session.remoteAssetAdaptorSignature) throw new Error('Seller\'s ' + assetCode + ' adaptor signature has not arrived yet');
+		var tx = claimTxFor(session, assetCode);
+		var buyerSig = ENGINE.signClaimTx(assetCode, tx, getLocalChildWif(session, assetCode));
+		var completedSellerSig = ENGINE.completeSig(Crypto.util.hexToBytes(session.remoteAssetAdaptorSignature), session.recoveredAdaptorSecret);
+		return broadcastClaim(session, assetCode, [completedSellerSig, buyerSig], 'assetClaim', 'swap_asset_claimed', { completedSigHex: completedSellerSig });
 	}
 
 	$(document).on('click', '.otcExecBtn', function () {
@@ -2658,29 +2677,29 @@ $(function () {
 				$button.prop('disabled', false);
 				return;
 			}
-			if (action === 'claim-alt') {
-				if (session.role !== 'seller') throw new Error('Only Seller claims ' + altChainOf(session) + ' first');
-				slog(session.swapId, '→ Claim ' + altChainOf(session) + ' requested by seller');
-				claimAltAsSeller(session).then(function (evidence) {
+			if (action === 'claim-payment') {
+				if (session.role !== 'seller') throw new Error('Only Seller claims ' + paymentChainOf(session) + ' first');
+				slog(session.swapId, '→ Claim ' + paymentChainOf(session) + ' requested by seller');
+				claimPaymentAsSeller(session).then(function (evidence) {
 					var liveSession = ENGINE.restoreLive(session.swapId) || session;
-					SWAP.safeAdvance(liveSession, 'ALT_CLAIMED', '' + altChainOf(liveSession) + ' claimed');
+					SWAP.safeAdvance(liveSession, 'PAYMENT_CLAIMED', '' + paymentChainOf(liveSession) + ' claimed');
 					ENGINE.saveLive(liveSession);
 					showActiveSwap(liveSession.swapId);
 					refreshSwaps();
-					slog(liveSession.swapId, '→ ' + altChainOf(liveSession) + ' claimed ' + evidence.txid);
+					slog(liveSession.swapId, '→ ' + paymentChainOf(liveSession) + ' claimed ' + evidence.txid);
 				}).fail(function (error) { flash('warning', error.message || error); }).always(function () { $button.prop('disabled', false); });
 				return;
 			}
-			if (action === 'claim-rod') {
-				if (session.role !== 'buyer') throw new Error('Only Buyer claims ROD after recovering the adaptor secret');
-				slog(session.swapId, '→ Claim ROD requested by buyer');
-				claimRodAsBuyer(session).then(function (evidence) {
+			if (action === 'claim-asset') {
+				if (session.role !== 'buyer') throw new Error('Only Buyer claims ' + assetChainOf(session) + ' after recovering the adaptor secret');
+				slog(session.swapId, '→ Claim ' + assetChainOf(session) + ' requested by buyer');
+				claimAssetAsBuyer(session).then(function (evidence) {
 					var liveSession = ENGINE.restoreLive(session.swapId) || session;
-					SWAP.safeAdvance(liveSession, 'ROD_CLAIMED', 'ROD claimed');
+					SWAP.safeAdvance(liveSession, 'ASSET_CLAIMED', 'asset claimed');
 					SWAP.safeAdvance(liveSession, 'COMPLETE', 'Swap complete');
 					ENGINE.saveLive(liveSession);
 					ENGINE.recordTrade(liveSession);
-					publish(liveSession, 'swap_complete', { rodClaim: { txid: evidence.txid } });
+					publish(liveSession, 'swap_complete', { assetClaim: { txid: evidence.txid } });
 					showActiveSwap(liveSession.swapId);
 					refreshSwaps();
 					slog(liveSession.swapId, '✓ COMPLETE ' + evidence.txid);
@@ -2696,8 +2715,8 @@ $(function () {
 			}
 			if (action === 'refresh') {
 				var tasks = [];
-				if (session.execution && session.execution.rodFunding && session.execution.rodFunding.txid) tasks.push(verifyFunding(session, 'ROD'));
-				if (session.execution && session.execution.altFunding && session.execution.altFunding.txid) tasks.push(verifyFunding(session, altChainOf(session)));
+				if (session.execution && session.execution.assetFunding && session.execution.assetFunding.txid) tasks.push(verifyFunding(session, assetChainOf(session)));
+				if (session.execution && session.execution.paymentFunding && session.execution.paymentFunding.txid) tasks.push(verifyFunding(session, paymentChainOf(session)));
 				$.when.apply($, tasks).always(function () { var liveSession = ENGINE.restoreLive(session.swapId) || session; slog(session.swapId, '↻ Refreshed funding confirmations'); autoContinueSwap(liveSession); showActiveSwap(session.swapId); $button.prop('disabled', false); });
 				return;
 			}
@@ -2745,28 +2764,31 @@ $(function () {
 		if (!swapAcct || !swapAcct.xpub) throw new Error('Swap account not ready — reopen wallet');
 		var role = $('#nsRole').val();
 		var myAddr = walletId.address;
-		var rodAmount = $.trim($('#nsRod').val());
-		var altAmount = $.trim($('#nsAlt').val());
+		var assetAmount = $.trim($('#nsRod').val());
+		var paymentAmount = $.trim($('#nsAlt').val());
 		var releaseRodHeight = parseInt($('#nsRelease').val(), 10);
-		if (!rodAmount || parseFloat(rodAmount) <= 0) throw new Error('Enter a positive ROD amount');
-		if (!altAmount || parseFloat(altAmount) <= 0) throw new Error('Enter a positive ' + selectedAltChain() + ' amount');
+		var assetChain = selectedAssetChain(), paymentChain = selectedPaymentChain();
+		if (assetChain === paymentChain) throw new Error('Asset and payment chains must be different');
+		if (!assetAmount || parseFloat(assetAmount) <= 0) throw new Error('Enter a positive ' + assetChain + ' amount');
+		if (!paymentAmount || parseFloat(paymentAmount) <= 0) throw new Error('Enter a positive ' + selectedPaymentChain() + ' amount');
 		if (!releaseRodHeight) throw new Error('Set release ROD height');
 		var orderId = myAddr + '/otc-order-' + Date.now();
 		/* Compact single-line JSON is safer for name_update size limits */
 		var payload = {
-			version: 1,
+			version: SWAP.PROTOCOL_VERSION,
 			type: 'otc-order',
 			side: role === 'seller' ? 'sell' : 'buy',
 			seller: role === 'seller' ? myAddr : '',
 			buyer: role === 'buyer' ? myAddr : '',
-			altChain: selectedAltChain(),
-			pair: 'ROD/' + selectedAltChain(),
-			give: rodAmount,
-			want: altAmount,
+			assetChain: assetChain,
+			paymentChain: selectedPaymentChain(),
+			pair: assetChain + '/' + paymentChain,
+			give: assetAmount,
+			want: paymentAmount,
 			sellerSwapXpub: role === 'seller' ? swapAcct.xpub : '',
 			buyerSwapXpub: role === 'buyer' ? swapAcct.xpub : '',
-			sellerAltPayoutAddress: role === 'seller' ? getWalletAddressForChain(walletId.wif, selectedAltChain()) : '',
-			buyerRodPayoutAddress: role === 'buyer' ? walletId.address : '',
+			sellerPaymentPayoutAddress: role === 'seller' ? getWalletAddressForChain(walletId.wif, selectedPaymentChain()) : '',
+			buyerAssetPayoutAddress: role === 'buyer' ? getWalletAddressForChain(walletId.wif, assetChain) : '',
 			releaseRodHeight: releaseRodHeight,
 			orderId: orderId
 		};
@@ -2803,7 +2825,7 @@ $(function () {
 			$('#nsOffer').val(JSON.stringify(payload, null, 2));
 			$('#nsPublishStatus').text('Checking wallet balance…');
 			$btn.prop('disabled', true);
-			ensureWalletFundsForRole($('#nsRole').val(), payload.give, payload.want).then(function () {
+			ensureWalletFundsForRole($('#nsRole').val(), payload.give, payload.want, payload.paymentChain, payload.assetChain).then(function () {
 				/* Publish the full detail to the relays first so the name record
 				   can carry its event id. The relay copy advertises NOTHING on
 				   its own — until the name record below is written the order is
@@ -2886,7 +2908,9 @@ $(function () {
 			/* Dust-limit validation: both the funding output AND the claim
 			   output (funding minus fee) must exceed the network dust
 			   threshold — otherwise the tx will be rejected by nodes. */
-			var altChainCode = selectedAltChain();
+			var assetChainCode = selectedAssetChain();
+			var paymentChainCode = selectedPaymentChain();
+			if (assetChainCode === paymentChainCode) throw new Error('Asset and payment chains must be different');
 			/* Dust is per-chain, and on Dogecoin it is an ABSOLUTE amount
 			   (0.001 DOGE hard limit) rather than something derived from a fee
 			   rate — so it cannot be paid away by bidding the fee higher. */
@@ -2896,28 +2920,30 @@ $(function () {
 			   exceeds the canonical settlement fee already fixed in the terms,
 			   so the claim and refund transactions could never be signed and the
 			   swap would stall permanently after passing this check. */
-			var rodDust = CHAINS.minEconomicalOutputSats('ROD');
-			var altDust = CHAINS.minEconomicalOutputSats(altChainCode);
+			var rodDust = CHAINS.minEconomicalOutputSats(assetChainCode);
+			var altDust = CHAINS.minEconomicalOutputSats(paymentChainCode);
 			var rodSats = CHAINS.decimalToSats($('#nsRod').val());
 			var altSats = CHAINS.decimalToSats($('#nsAlt').val());
-			var rodClaimFeeSats = CHAINS.decimalToSats(claimFee(null, 'ROD'));
-			var altClaimFeeSats = CHAINS.decimalToSats(claimFee(null, altChainCode));
-			if (rodSats < rodDust) throw new Error('ROD amount (' + rodSats + ' sats) is below the dust limit (' + rodDust + ' sats). Minimum: ' + CHAINS.satsToDecimal(rodDust) + ' ROD');
-			if (altSats < altDust) throw new Error(altChainCode + ' amount (' + altSats + ' base units) is below the dust limit (' + altDust + '). Minimum: ' + CHAINS.satsToDecimal(altDust) + ' ' + altChainCode);
-			if (rodSats - rodClaimFeeSats < rodDust) throw new Error('ROD claim output (' + (rodSats - rodClaimFeeSats) + ' sats) would be dust after fee. Increase the ROD amount.');
-			if (altSats - altClaimFeeSats < altDust) throw new Error(altChainCode + ' claim output (' + (altSats - altClaimFeeSats) + ') would be dust after fee. Increase the ' + altChainCode + ' amount.');
+			var assetClaimFeeSats = CHAINS.decimalToSats(SWAP.chainFees(assetChainCode).claim);
+			var paymentClaimFeeSats = CHAINS.decimalToSats(claimFee(null, paymentChainCode));
+			if (rodSats < rodDust) throw new Error(assetChainCode + ' amount (' + rodSats + ' base units) is below the dust limit (' + rodDust + '). Minimum: ' + CHAINS.satsToDecimal(rodDust) + ' ' + assetChainCode);
+			if (altSats < altDust) throw new Error(paymentChainCode + ' amount (' + altSats + ' base units) is below the dust limit (' + altDust + '). Minimum: ' + CHAINS.satsToDecimal(altDust) + ' ' + paymentChainCode);
+			if (rodSats - assetClaimFeeSats < rodDust) throw new Error(assetChainCode + ' claim output (' + (rodSats - assetClaimFeeSats) + ') would be dust after fee. Increase the ' + assetChainCode + ' amount.');
+			if (altSats - paymentClaimFeeSats < altDust) throw new Error(paymentChainCode + ' claim output (' + (altSats - paymentClaimFeeSats) + ') would be dust after fee. Increase the ' + paymentChainCode + ' amount.');
 
 			$btn.prop('disabled', true);
 			flash('info', 'Checking wallet balance…');
 
 			$.when(
-				ensureWalletFundsForRole(role, $('#nsRod').val(), $('#nsAlt').val(), altChainCode),
-				ENGINE.getRodHeight(),
-				ENGINE.getAltHeight(altChainCode)
-			).then(function (balanceProof, rodHeight, altHeight) {
+				ensureWalletFundsForRole(role, $('#nsRod').val(), $('#nsAlt').val(), paymentChainCode, assetChainCode),
+				ENGINE.getChainHeight(assetChainCode),
+				ENGINE.getChainHeight(paymentChainCode),
+				ENGINE.getRodHeight()
+			).then(function (balanceProof, assetHeight, paymentHeight, controlHeight) {
 				try {
-				var cfgNow = ENGINE.loadConfig();
-				var altChainCfg = ENGINE.altChainConfig(altChainCode, cfgNow);
+					var cfgNow = ENGINE.loadConfig();
+					var assetChainCfg = ENGINE.chainConfig(assetChainCode, cfgNow);
+					var paymentChainCfg = ENGINE.chainConfig(paymentChainCode, cfgNow);
 				var myAddr = walletId.address;
 				var orderId = (role === 'seller' ? myAddr : peer) + '/otc-' + Date.now();
 				var sellerIdentity = role === 'seller' ? myAddr : peer;
@@ -2928,41 +2954,44 @@ $(function () {
 				   their current wallet address on the destination chain.
 				   LOCAL: derived from the open wallet's WIF.
 				   PEER: carried from the order via peerPayoutAddress. */
-				var sellerAltPayoutAddress = role === 'seller'
-					? getWalletAddressForChain(walletId.wif, altChainCode)
+				var sellerPaymentPayoutAddress = role === 'seller'
+					? getWalletAddressForChain(walletId.wif, paymentChainCode)
 					: peerPayoutAddress;
-				var buyerRodPayoutAddress = role === 'buyer'
-					? walletId.address
+				var buyerAssetPayoutAddress = role === 'buyer'
+					? getWalletAddressForChain(walletId.wif, assetChainCode)
 					: peerPayoutAddress;
-				/* Refund locks: Seller (secret holder) refunds LATE on ROD, Buyer
-				   refunds EARLY on the alt chain — enforced by native
+				/* Refund locks: Seller (secret holder) refunds LATE on the asset chain, Buyer
+				   refunds EARLY on the payment chain — enforced by native
 				   nLockTime. The alt block count is per chain so the window is
 				   the same wall-clock duration on every chain. */
-				var refundRodHeight = parseInt(rodHeight, 10) + (parseInt(cfgNow.refundRodBlocks, 10) || 480);
-				var altRefundLockHeight = parseInt(altHeight, 10) + (parseInt(altChainCfg.refundBlocks, 10) || 24);
+				var assetRefundLockHeight = parseInt(assetHeight, 10) + refundBlocksForRole(assetChainCode, assetChainCfg, 'asset');
+				var paymentRefundLockHeight = parseInt(paymentHeight, 10) + refundBlocksForRole(paymentChainCode, paymentChainCfg, 'payment');
 				var releaseRodHeight = parseInt($('#nsRelease').val(), 10);
-				if (releaseRodHeight >= refundRodHeight) {
-					throw new Error('Release height ' + releaseRodHeight + ' must be below the ROD refund height ' + refundRodHeight);
+				var releaseSeconds = Math.max(0, releaseRodHeight - parseInt(controlHeight, 10)) * CHAINS.getPolicy('ROD').blockSeconds;
+				var paymentRefundSeconds = (paymentRefundLockHeight - parseInt(paymentHeight, 10)) * CHAINS.getPolicy(paymentChainCode).blockSeconds;
+				if (releaseSeconds + SWAP.MIN_REFUND_SAFETY_MARGIN_SECONDS >= paymentRefundSeconds) {
+					throw new Error('Release time leaves too little room before the ' + paymentChainCode + ' refund. Use an earlier release height.');
 				}
 
 				var session = SWAP.createOfferSession({
 					role: role, swapId: swapId, orderId: orderId,
-					altChain: altChainCode,
-					rodAmount: $('#nsRod').val(), altAmount: $('#nsAlt').val(),
+					assetChain: assetChainCode,
+					paymentChain: paymentChainCode,
+					assetAmount: $('#nsRod').val(), paymentAmount: $('#nsAlt').val(),
 					releaseRodHeight: $('#nsRelease').val(),
 					sellerSwapAccountKey: role === 'seller' ? swapAcct.xprv : peerXpub,
 					buyerSwapAccountKey: role === 'seller' ? peerXpub : swapAcct.xprv,
 					sellerSwapXpub: role === 'seller' ? swapAcct.xpub : peerXpub,
 					buyerSwapXpub: role === 'seller' ? peerXpub : swapAcct.xpub,
-					sellerAltPayoutAddress: sellerAltPayoutAddress,
-					buyerRodPayoutAddress: buyerRodPayoutAddress,
+					sellerPaymentPayoutAddress: sellerPaymentPayoutAddress,
+					buyerAssetPayoutAddress: buyerAssetPayoutAddress,
 					sellerIdentity: sellerIdentity,
 					buyerIdentity: buyerIdentity,
 					termsNonce: termsNonce,
-					refundRodHeight: refundRodHeight,
-					altRefundLockHeight: altRefundLockHeight,
-					rodConfirmations: parseInt(cfgNow.rodConfirmations, 10) || 1,
-					altConfirmations: parseInt(altChainCfg.confirmations, 10) || 1
+					assetRefundLockHeight: assetRefundLockHeight,
+					paymentRefundLockHeight: paymentRefundLockHeight,
+					assetConfirmations: parseInt(assetChainCfg.confirmations, 10) || 1,
+					paymentConfirmations: parseInt(paymentChainCfg.confirmations, 10) || 1
 				});
 
 				session.readiness = session.readiness || {};
@@ -2991,12 +3020,12 @@ $(function () {
 
 				$('#nsSwapId').val(session.swapId);
 				$('#nsOffer').val(JSON.stringify({
-					version: 1, type: 'otc-order', seller: role === 'seller' ? myAddr : peer,
+					version: SWAP.PROTOCOL_VERSION, type: 'otc-order', seller: role === 'seller' ? myAddr : peer,
 					buyer: role === 'buyer' ? myAddr : peer,
-					pair: pairLabel(session), altChain: altChainOf(session), give: session.terms.rodAmount, want: session.terms.altAmount,
+					pair: pairLabel(session), assetChain: assetChainOf(session), paymentChain: paymentChainOf(session), give: session.terms.assetAmount, want: session.terms.paymentAmount,
 					sellerSwapXpub: session.sellerSwapXpub, buyerSwapXpub: session.buyerSwapXpub,
-					sellerAltPayoutAddress: session.terms.sellerAltPayoutAddress,
-					buyerRodPayoutAddress: session.terms.buyerRodPayoutAddress,
+					sellerPaymentPayoutAddress: session.terms.sellerPaymentPayoutAddress,
+					buyerAssetPayoutAddress: session.terms.buyerAssetPayoutAddress,
 					releaseRodHeight: session.terms.releaseRodHeight,
 					termsHash: session.terms.termsHash
 				}, null, 2));
@@ -3027,7 +3056,7 @@ $(function () {
 		s._log = s._log || [];
 		s._log.push('[' + ts() + '] ' + msg);
 		if (s._log.length > 80) s._log = s._log.slice(-80);
-		all[id] = s; localStorage.setItem('rodOtcLive', JSON.stringify(all));
+		ENGINE.saveLive(s);
 		log(msg);
 	}
 
@@ -3047,7 +3076,7 @@ $(function () {
 
 	function createIncomingTermsSession(env, eventObject, freshTips) {
 		var p = env.payload || {}, terms = p.terms;
-		if (env.type !== 'swap_terms' || !terms) {
+		if (env.type !== 'swap_terms' || !terms || terms.protocol !== SWAP.PROTOCOL_VERSION) {
 			if (ENGINE.trackedSwapIds && ENGINE.trackedSwapIds[env.swapId]) log('Tracked ' + short(env.swapId) + ' ignored until swap_terms arrives; got ' + env.type);
 			return null;
 		}
@@ -3068,51 +3097,51 @@ $(function () {
 				}
 			}
 			/* Refund-safety sanity checks before a session is even created */
-			if (!(parseInt(terms.refundRodHeight, 10) > parseInt(terms.releaseRodHeight, 10))) {
-				throw new Error('Incoming terms rejected: refundRodHeight must be above releaseRodHeight');
-			}
-			if (!(parseInt(terms.altRefundLockHeight, 10) > 0)) {
+			if (!(parseInt(terms.assetRefundLockHeight, 10) > 0)) throw new Error('Incoming terms rejected: missing asset-chain refund lock height');
+			if (!(parseInt(terms.paymentRefundLockHeight, 10) > 0)) {
 				throw new Error('Incoming terms rejected: missing alt-chain refund lock height');
 			}
-			/* Reject an unknown alt chain up front. Without this the rebuild
+			/* Reject an unknown settlement chain up front. Without this the rebuild
 			   below would silently fall back to the default chain, and the peer
 			   would only see an opaque terms-hash mismatch. The hash check that
 			   follows is what actually BINDS the chain: terms are rebuilt
-			   locally from terms.altChain, so a peer cannot announce one chain
+			   locally from terms.paymentChain, so a peer cannot announce one chain
 			   and get signatures for another. */
-			var incomingAltChain = terms.altChain || SWAP.DEFAULT_ALT_CHAIN;
-			if (incomingAltChain === 'ROD' || !CHAINS.definitions[incomingAltChain]) {
-				throw new Error('Incoming terms rejected: unsupported alt chain ' + incomingAltChain);
+			var incomingAssetChain = terms.assetChain;
+			var incomingPaymentChain = terms.paymentChain;
+			if (!CHAINS.definitions[incomingAssetChain] || !CHAINS.definitions[incomingPaymentChain] || incomingAssetChain === incomingPaymentChain) {
+				throw new Error('Incoming terms rejected: unsupported pair ' + terms.pair);
 			}
 			if (!freshTips) {
 				throw new Error('Incoming terms rejected: current chain heights were not verified');
 			}
-			var refundProof = SWAP.assertRefundOrdering(terms, freshTips.rodHeight, freshTips.altHeight);
+			var refundProof = SWAP.assertRefundOrdering(terms, freshTips.assetHeight, freshTips.paymentHeight, freshTips.controlHeight);
 			var session = SWAP.createOfferSession({
 				role: role,
 				swapId: env.swapId,
 				orderId: terms.orderId,
-				altChain: incomingAltChain,
-				rodAmount: terms.rodAmount,
-				altAmount: terms.altAmount,
+				assetChain: incomingAssetChain,
+				paymentChain: incomingPaymentChain,
+				assetAmount: terms.assetAmount,
+				paymentAmount: terms.paymentAmount,
 					releaseRodHeight: terms.releaseRodHeight,
 					sellerSwapAccountKey: role === 'seller' ? swapAcct.xprv : terms.sellerSwapXpub,
 					buyerSwapAccountKey: role === 'buyer' ? swapAcct.xprv : terms.buyerSwapXpub,
 					sellerSwapXpub: terms.sellerSwapXpub,
 					buyerSwapXpub: terms.buyerSwapXpub,
-					sellerAltPayoutAddress: terms.sellerAltPayoutAddress,
-				buyerRodPayoutAddress: terms.buyerRodPayoutAddress,
+					sellerPaymentPayoutAddress: terms.sellerPaymentPayoutAddress,
+				buyerAssetPayoutAddress: terms.buyerAssetPayoutAddress,
 				sellerIdentity: terms.sellerIdentity,
 				buyerIdentity: terms.buyerIdentity,
 				termsNonce: terms.termsNonce,
-				refundRodHeight: terms.refundRodHeight,
-				altRefundLockHeight: terms.altRefundLockHeight,
-				rodConfirmations: terms.rodConfirmations,
-				altConfirmations: terms.altConfirmations,
-				rodClaimFee: terms.rodClaimFee,
-				altClaimFee: terms.altClaimFee,
-				rodRefundFee: terms.rodRefundFee,
-				altRefundFee: terms.altRefundFee
+				assetRefundLockHeight: terms.assetRefundLockHeight,
+				paymentRefundLockHeight: terms.paymentRefundLockHeight,
+				assetConfirmations: terms.assetConfirmations,
+				paymentConfirmations: terms.paymentConfirmations,
+				assetClaimFee: terms.assetClaimFee,
+				paymentClaimFee: terms.paymentClaimFee,
+				assetRefundFee: terms.assetRefundFee,
+				paymentRefundFee: terms.paymentRefundFee
 			});
 			try {
 				/* The locally rebuilt terms are authoritative. A child-key match
@@ -3157,10 +3186,10 @@ $(function () {
 			}
 			$('#otcTrackSwapStatus').html('Added <code>' + esc(short(env.swapId)) + '</code> from incoming terms.');
 			slog(env.swapId, '← Created incoming ' + (role === 'seller' ? 'seller' : 'buyer') + ' session from terms');
-			ensureWalletFundsForRole(role, terms.rodAmount, terms.altAmount, altChainOf(terms)).then(function (balanceProof) {
+			ensureWalletFundsForRole(role, terms.assetAmount, terms.paymentAmount, paymentChainOf(terms), assetChainOf(terms)).then(function (balanceProof) {
 				saveLocalReadiness(session, buildReadinessEvidence(balanceProof), '→ Sent local readiness proof');
 			}, function (error) {
-				var fallbackReadiness = buildLocalReadinessUnchecked(role, terms.rodAmount, terms.altAmount, 'Balance check blocked: ' + error, altChainOf(terms));
+				var fallbackReadiness = buildLocalReadinessUnchecked(role, terms.assetAmount, terms.paymentAmount, 'Balance check blocked: ' + error, paymentChainOf(terms), assetChainOf(terms));
 				saveLocalReadiness(session, fallbackReadiness, '⚠ Sent unverified local readiness after balance check failed: ' + error);
 				flash('warning', 'Readiness sent without balance verification: ' + error);
 			});
@@ -3178,17 +3207,19 @@ $(function () {
 	function queueIncomingTermsSession(env, eventObject) {
 		if (incomingTermsChecks[env.swapId]) return;
 		var terms = env.payload && env.payload.terms;
-		var chainCode = terms && String(terms.altChain || SWAP.DEFAULT_ALT_CHAIN).toUpperCase();
-		if (!terms || chainCode === 'ROD' || !CHAINS.definitions[chainCode]) {
+		var assetCode = terms && String(terms.assetChain || '').toUpperCase();
+		var paymentCode = terms && String(terms.paymentChain || '').toUpperCase();
+		if (!terms || terms.protocol !== SWAP.PROTOCOL_VERSION || !CHAINS.definitions[assetCode] || !CHAINS.definitions[paymentCode] || assetCode === paymentCode) {
 			createIncomingTermsSession(env, eventObject, null);
 			return;
 		}
 		incomingTermsChecks[env.swapId] = true;
-		$.when(ENGINE.getRodHeight(), ENGINE.getAltHeight(chainCode)).then(function (rodHeight, altHeight) {
+		$.when(ENGINE.getChainHeight(assetCode), ENGINE.getChainHeight(paymentCode), ENGINE.getRodHeight()).then(function (assetHeight, paymentHeight, controlHeight) {
 			delete incomingTermsChecks[env.swapId];
 			var created = createIncomingTermsSession(env, eventObject, {
-				rodHeight: scalarResult(rodHeight),
-				altHeight: scalarResult(altHeight)
+				assetHeight: scalarResult(assetHeight),
+				paymentHeight: scalarResult(paymentHeight),
+				controlHeight: scalarResult(controlHeight)
 			});
 			if (created) autoProcess(env, eventObject);
 		}, function (error) {
@@ -3230,7 +3261,7 @@ $(function () {
 		   re-publishes it on every tick until remotePrepared, so duplicates are
 		   normal and idempotent. A CHANGED point after we have already built an
 		   adaptor signature against the old one is not recoverable: our
-		   localAltAdaptorSignature is encrypted to the old Y, so recoverSecret()
+		   localPaymentAdaptorSignature is encrypted to the old Y, so recoverSecret()
 		   against a new Y fails for every candidate. Pin the first value we act
 		   on and treat any later disagreement as a protocol fault. */
 		if (env.type === 'swap_adaptor_point' && p.adaptorPoint) {
@@ -3239,7 +3270,7 @@ $(function () {
 				slog(env.swapId, '← Adaptor point received');
 				ENGINE.saveLive(sess);
 			} else if (sess.adaptorPoint !== p.adaptorPoint) {
-				var pinned = !!(sess.localAltAdaptorSignature || sess.localRodAdaptorSignature || sess.localPrepared);
+				var pinned = !!(sess.localPaymentAdaptorSignature || sess.localAssetAdaptorSignature || sess.localPrepared);
 				if (pinned) {
 					if (!sess._adaptorPointConflict) {
 						sess._adaptorPointConflict = true;
@@ -3283,20 +3314,20 @@ $(function () {
 			refreshSwaps();
 		}
 		/* --- Pre-funding protocol messages --- */
-		if (env.type === 'swap_rod_funding_planned' && p.txid && !isLocalEcho(sess, eventObject)) {
+		if (env.type === 'swap_asset_funding_planned' && p.txid && !isLocalEcho(sess, eventObject)) {
 			try { ensureRemotePeer(sess, eventObject); } catch (peerErrorP1) { slog(env.swapId, peerErrorP1.message || peerErrorP1); return; }
-			if (sess.role === 'buyer' && !(sess.plannedRodFunding && sess.plannedRodFunding.txid)) {
-				sess.plannedRodFunding = { txid: p.txid, vout: p.vout || 0, value: p.value, amount: p.amount };
-				slog(env.swapId, '← Seller planned ROD funding ' + short(p.txid) + ' (not yet broadcast)');
+			if (sess.role === 'buyer' && !(sess.plannedAssetFunding && sess.plannedAssetFunding.txid)) {
+				sess.plannedAssetFunding = { txid: p.txid, vout: p.vout || 0, value: p.value, amount: p.amount };
+				slog(env.swapId, '← Seller planned asset funding ' + short(p.txid) + ' (not yet broadcast)');
 				ENGINE.saveLive(sess);
 				autoContinueSwap(sess);
 			}
 		}
-		if (env.type === 'swap_alt_funding_planned' && p.txid && !isLocalEcho(sess, eventObject)) {
+		if (env.type === 'swap_payment_funding_planned' && p.txid && !isLocalEcho(sess, eventObject)) {
 			try { ensureRemotePeer(sess, eventObject); } catch (peerErrorP2) { slog(env.swapId, peerErrorP2.message || peerErrorP2); return; }
-			if (sess.role === 'seller' && !(sess.plannedAltFunding && sess.plannedAltFunding.txid)) {
-				sess.plannedAltFunding = { txid: p.txid, vout: p.vout || 0, value: p.value, amount: p.amount };
-				slog(env.swapId, '← Buyer planned ' + altChainOf(sess) + ' funding ' + short(p.txid) + ' (not yet broadcast)');
+			if (sess.role === 'seller' && !(sess.plannedPaymentFunding && sess.plannedPaymentFunding.txid)) {
+				sess.plannedPaymentFunding = { txid: p.txid, vout: p.vout || 0, value: p.value, amount: p.amount };
+				slog(env.swapId, '← Buyer planned ' + paymentChainOf(sess) + ' funding ' + short(p.txid) + ' (not yet broadcast)');
 				ENGINE.saveLive(sess);
 				autoContinueSwap(sess);
 			}
@@ -3309,42 +3340,42 @@ $(function () {
 		   always rebuilds the refund/claim TEMPLATE ITSELF from canonical
 		   terms + the planned outpoint and verifies against that self-built
 		   sighash — nothing signed here is taken on trust from the wire. */
-		if (env.type === 'swap_rod_refund_signature' && p.signature && !isLocalEcho(sess, eventObject)) {
+		if (env.type === 'swap_asset_refund_signature' && p.signature && !isLocalEcho(sess, eventObject)) {
 			try { ensureRemotePeer(sess, eventObject); } catch (peerErrorR1) { slog(env.swapId, peerErrorR1.message || peerErrorR1); return; }
-			if (sess.role === 'buyer' && p.from === 'seller' && !sess.rodRefundCosigned) {
-				sess._pendingRodRefundSig = p.signature;
+			if (sess.role === 'buyer' && p.from === 'seller' && !sess.assetRefundCosigned) {
+				sess._pendingAssetRefundSig = p.signature;
 				ENGINE.saveLive(sess);
 				autoContinueSwap(sess);
 			}
-			if (sess.role === 'seller' && p.from === 'buyer' && sess.rodRefund && sess.rodRefund.localSig && !sess.rodRefund.signedHex) {
-				sess._pendingRodRefundCosig = p.signature;
+			if (sess.role === 'seller' && p.from === 'buyer' && sess.assetRefund && sess.assetRefund.localSig && !sess.assetRefund.signedHex) {
+				sess._pendingAssetRefundCosig = p.signature;
 				ENGINE.saveLive(sess);
 				autoContinueSwap(sess);
 			}
 		}
-		if (env.type === 'swap_alt_refund_signature' && p.signature && !isLocalEcho(sess, eventObject)) {
+		if (env.type === 'swap_payment_refund_signature' && p.signature && !isLocalEcho(sess, eventObject)) {
 			try { ensureRemotePeer(sess, eventObject); } catch (peerErrorR2) { slog(env.swapId, peerErrorR2.message || peerErrorR2); return; }
-			if (sess.role === 'seller' && p.from === 'buyer' && !sess.altRefundCosigned) {
-				sess._pendingAltRefundSig = p.signature;
+			if (sess.role === 'seller' && p.from === 'buyer' && !sess.paymentRefundCosigned) {
+				sess._pendingPaymentRefundSig = p.signature;
 				ENGINE.saveLive(sess);
 				autoContinueSwap(sess);
 			}
-			if (sess.role === 'buyer' && p.from === 'seller' && sess.altRefund && sess.altRefund.localSig && !sess.altRefund.signedHex) {
-				sess._pendingAltRefundCosig = p.signature;
-				ENGINE.saveLive(sess);
-				autoContinueSwap(sess);
-			}
-		}
-		if (env.type === 'swap_alt_adaptor_signature' && p.hex && !isLocalEcho(sess, eventObject)) {
-			if (sess.role === 'seller' && !sess.remoteAltAdaptorSignature) {
-				sess._pendingAltAdaptorSig = p.hex;
+			if (sess.role === 'buyer' && p.from === 'seller' && sess.paymentRefund && sess.paymentRefund.localSig && !sess.paymentRefund.signedHex) {
+				sess._pendingPaymentRefundCosig = p.signature;
 				ENGINE.saveLive(sess);
 				autoContinueSwap(sess);
 			}
 		}
-		if (env.type === 'swap_rod_adaptor_signature' && p.hex && !isLocalEcho(sess, eventObject)) {
-			if (sess.role === 'buyer' && !sess.remoteRodAdaptorSignature) {
-				sess._pendingRodAdaptorSig = p.hex;
+		if (env.type === 'swap_payment_adaptor_signature' && p.hex && !isLocalEcho(sess, eventObject)) {
+			if (sess.role === 'seller' && !sess.remotePaymentAdaptorSignature) {
+				sess._pendingPaymentAdaptorSig = p.hex;
+				ENGINE.saveLive(sess);
+				autoContinueSwap(sess);
+			}
+		}
+		if (env.type === 'swap_asset_adaptor_signature' && p.hex && !isLocalEcho(sess, eventObject)) {
+			if (sess.role === 'buyer' && !sess.remoteAssetAdaptorSignature) {
+				sess._pendingAssetAdaptorSig = p.hex;
 				ENGINE.saveLive(sess);
 				autoContinueSwap(sess);
 			}
@@ -3356,63 +3387,63 @@ $(function () {
 			ENGINE.saveLive(sess);
 			autoContinueSwap(sess);
 		}
-		if (env.type === 'swap_rod_funded' && p.funding) {
+		if (env.type === 'swap_asset_funded' && p.funding) {
 			try { ensureRemotePeer(sess, eventObject); } catch (peerError3) { slog(env.swapId, peerError3.message || peerError3); return; }
 			/* Gate: on-chain funding evidence must match the PLANNED txid the
 			   refunds and adaptor signatures were built against. */
-			if (sess.plannedRodFunding && p.funding.txid && p.funding.txid !== sess.plannedRodFunding.txid) {
-				slog(env.swapId, '✗ ROD funding evidence txid does not match planned funding — ignored');
+			if (sess.plannedAssetFunding && p.funding.txid && p.funding.txid !== sess.plannedAssetFunding.txid) {
+				slog(env.swapId, '✗ asset funding evidence txid does not match planned funding — ignored');
 			} else {
 				/* Merge (not replace) so locally-derived fields survive, and strip
 				   verifiedLocally: remote claims are never local verification. */
 				var rodEvidence = $.extend({}, p.funding); delete rodEvidence.verifiedLocally;
 				sess.execution = sess.execution || {};
-				sess.execution.rodFunding = $.extend({}, sess.execution.rodFunding || {}, rodEvidence);
-				try { SWAP.safeAdvance(sess, 'SELLER_ROD_FUNDED', 'Remote ROD funding evidence'); } catch (e1) {}
-				slog(env.swapId, '← ROD funding evidence'); ENGINE.saveLive(sess);
+				sess.execution.assetFunding = $.extend({}, sess.execution.assetFunding || {}, rodEvidence);
+				try { SWAP.safeAdvance(sess, 'ASSET_FUNDED', 'Remote asset funding evidence'); } catch (e1) {}
+				slog(env.swapId, '← asset funding evidence'); ENGINE.saveLive(sess);
 				autoContinueSwap(sess);
 			}
 		}
-		if (env.type === 'swap_alt_funded' && p.funding) {
+		if (env.type === 'swap_payment_funded' && p.funding) {
 			try { ensureRemotePeer(sess, eventObject); } catch (peerError4) { slog(env.swapId, peerError4.message || peerError4); return; }
-			if (sess.plannedAltFunding && p.funding.txid && p.funding.txid !== sess.plannedAltFunding.txid) {
-				slog(env.swapId, '✗ ' + altChainOf(sess) + ' funding evidence txid does not match planned funding — ignored');
+			if (sess.plannedPaymentFunding && p.funding.txid && p.funding.txid !== sess.plannedPaymentFunding.txid) {
+				slog(env.swapId, '✗ ' + paymentChainOf(sess) + ' funding evidence txid does not match planned funding — ignored');
 			} else {
 				var altEvidence = $.extend({}, p.funding); delete altEvidence.verifiedLocally;
 				sess.execution = sess.execution || {};
-				sess.execution.altFunding = $.extend({}, sess.execution.altFunding || {}, altEvidence);
-				try { SWAP.safeAdvance(sess, 'BUYER_ALT_FUNDED', 'Remote ' + altChainOf(sess) + ' funding evidence'); } catch (e2) {}
-				slog(env.swapId, '← ' + altChainOf(sess) + ' funding evidence'); ENGINE.saveLive(sess);
+				sess.execution.paymentFunding = $.extend({}, sess.execution.paymentFunding || {}, altEvidence);
+				try { SWAP.safeAdvance(sess, 'PAYMENT_FUNDED', 'Remote ' + paymentChainOf(sess) + ' funding evidence'); } catch (e2) {}
+				slog(env.swapId, '← ' + paymentChainOf(sess) + ' funding evidence'); ENGINE.saveLive(sess);
 				autoContinueSwap(sess);
 			}
 		}
-		if (env.type === 'swap_alt_claimed' && !isLocalEcho(sess, eventObject)) {
+		if (env.type === 'swap_payment_claimed' && !isLocalEcho(sess, eventObject)) {
 			sess.execution = sess.execution || {};
-			sess.execution.altClaim = $.extend({}, sess.execution.altClaim || {}, p);
-			try { SWAP.safeAdvance(sess, 'ALT_CLAIMED', 'Remote ' + altChainOf(sess) + ' claim evidence'); } catch (e3) {}
-			slog(env.swapId, '← ' + altChainOf(sess) + ' claimed evidence'); ENGINE.saveLive(sess);
+			sess.execution.paymentClaim = $.extend({}, sess.execution.paymentClaim || {}, p);
+			try { SWAP.safeAdvance(sess, 'PAYMENT_CLAIMED', 'Remote ' + paymentChainOf(sess) + ' claim evidence'); } catch (e3) {}
+			slog(env.swapId, '← ' + paymentChainOf(sess) + ' claimed evidence'); ENGINE.saveLive(sess);
 			if (sess.role === 'buyer') {
 				if (tryRecoverFromEvidence(sess)) autoContinueSwap(ENGINE.restoreLive(sess.swapId) || sess);
 				else autoContinueSwap(sess);
 			}
 		}
-		if (env.type === 'swap_rod_refund_broadcast' && !isLocalEcho(sess, eventObject)) {
+		if (env.type === 'swap_asset_refund_broadcast' && !isLocalEcho(sess, eventObject)) {
 			sess.execution = sess.execution || {};
-			sess.execution.rodRefund = $.extend({}, sess.execution.rodRefund || {}, { txid: p.txid || '' });
+			sess.execution.assetRefund = $.extend({}, sess.execution.assetRefund || {}, { txid: p.txid || '' });
 			try {
-				var altClaimedBySeller = !!(sess.execution.altClaim && sess.execution.altClaim.txid);
-				SWAP.markRefundState(sess, altClaimedBySeller ? 'PARTIALLY_SETTLED' : (sess.state === 'ALT_REFUNDED' ? 'REFUNDED' : 'ROD_REFUNDED'), 'Counterparty broadcast ROD refund');
+				var paymentClaimedBySeller = !!(sess.execution.paymentClaim && sess.execution.paymentClaim.txid);
+				SWAP.markRefundState(sess, paymentClaimedBySeller ? 'PARTIALLY_SETTLED' : (sess.state === 'PAYMENT_REFUNDED' ? 'REFUNDED' : 'ASSET_REFUNDED'), 'Counterparty broadcast asset refund');
 			} catch (refundStateError1) {}
-			slog(env.swapId, '← ROD refund broadcast by counterparty'); ENGINE.saveLive(sess);
+			slog(env.swapId, '← asset refund broadcast by counterparty'); ENGINE.saveLive(sess);
 			refreshSwaps();
 		}
-		if (env.type === 'swap_alt_refund_broadcast' && !isLocalEcho(sess, eventObject)) {
+		if (env.type === 'swap_payment_refund_broadcast' && !isLocalEcho(sess, eventObject)) {
 			sess.execution = sess.execution || {};
-			sess.execution.altRefund = $.extend({}, sess.execution.altRefund || {}, { txid: p.txid || '' });
+			sess.execution.paymentRefund = $.extend({}, sess.execution.paymentRefund || {}, { txid: p.txid || '' });
 			try {
-				SWAP.markRefundState(sess, (sess.state === 'ROD_REFUNDED' || sess.state === 'REFUNDED') ? 'REFUNDED' : 'ALT_REFUNDED', 'Counterparty broadcast ' + altChainOf(sess) + ' refund');
+				SWAP.markRefundState(sess, (sess.state === 'ASSET_REFUNDED' || sess.state === 'REFUNDED') ? 'REFUNDED' : 'PAYMENT_REFUNDED', 'Counterparty broadcast ' + paymentChainOf(sess) + ' refund');
 			} catch (refundStateError2) {}
-			slog(env.swapId, '← ' + altChainOf(sess) + ' refund broadcast by counterparty'); ENGINE.saveLive(sess);
+			slog(env.swapId, '← ' + paymentChainOf(sess) + ' refund broadcast by counterparty'); ENGINE.saveLive(sess);
 			refreshSwaps();
 		}
 		if (env.type === 'swap_refunded' && !isLocalEcho(sess, eventObject)) {
@@ -3424,10 +3455,10 @@ $(function () {
 			try { SWAP.safeAdvance(sess, 'SECRET_RECOVERED', 'Remote secret recovery evidence'); } catch (e4) {}
 			slog(env.swapId, '← Secret recovery evidence'); ENGINE.saveLive(sess);
 		}
-		if (env.type === 'swap_rod_claimed' && !isLocalEcho(sess, eventObject)) {
-			sess.execution = sess.execution || {}; sess.execution.rodClaim = p;
-			try { SWAP.safeAdvance(sess, 'ROD_CLAIMED', 'Remote ROD claim evidence'); } catch (e5) {}
-			slog(env.swapId, '← ROD claimed evidence'); ENGINE.saveLive(sess);
+		if (env.type === 'swap_asset_claimed' && !isLocalEcho(sess, eventObject)) {
+			sess.execution = sess.execution || {}; sess.execution.assetClaim = p;
+			try { SWAP.safeAdvance(sess, 'ASSET_CLAIMED', 'Remote asset claim evidence'); } catch (e5) {}
+			slog(env.swapId, '← asset claimed evidence'); ENGINE.saveLive(sess);
 		}
 		if (env.type === 'swap_complete' && !isLocalEcho(sess, eventObject)) {
 			sess.state = 'COMPLETE'; ENGINE.saveLive(sess);
@@ -3443,8 +3474,8 @@ $(function () {
 	function refreshHistory() {
 		var h = ENGINE.getHistory();
 		$('#otcHistBody').html(h.map(function (t) {
-			var counterCurrency = t.altChain || (t.pair ? String(t.pair).split('/')[1] : '') || DEFAULT_ALT_CHAIN;
-			return '<tr><td>' + esc((t.completedAt || '').slice(0, 16)) + '</td><td><code style="font-size:10px;word-break:break-all">' + esc(t.swapId) + '</code></td><td>' + esc(t.role) + '</td><td>' + esc(t.rodAmount) + '</td><td>' + esc(t.altAmount) + ' <span style="font-size:10px;color:#7fa6ba">' + esc(counterCurrency) + '</span></td><td><span class="label label-' + (t.state === 'COMPLETE' ? 'success' : 'default') + '">' + esc(t.state) + '</span></td></tr>';
+			var counterCurrency = t.paymentChain || (t.pair ? String(t.pair).split('/')[1] : '') || DEFAULT_PAYMENT_CHAIN;
+			return '<tr><td>' + esc((t.completedAt || '').slice(0, 16)) + '</td><td><code style="font-size:10px;word-break:break-all">' + esc(t.swapId) + '</code></td><td>' + esc(t.role) + '</td><td>' + esc(t.assetAmount) + '</td><td>' + esc(t.paymentAmount) + ' <span style="font-size:10px;color:#7fa6ba">' + esc(counterCurrency) + '</span></td><td><span class="label label-' + (t.state === 'COMPLETE' ? 'success' : 'default') + '">' + esc(t.state) + '</span></td></tr>';
 		}).join('') || '<tr><td colspan="6" class="text-muted">No trades yet.</td></tr>');
 	}
 	$('#otcClearHist').on('click', function () { ENGINE.clearHistory(); refreshHistory(); });
@@ -3540,11 +3571,10 @@ $(function () {
 	   previous page run left behind, then resume automation for every live
 	   session so a reload never strands a swap mid-flow. */
 	(function resumeAfterReload() {
-		var all = ENGINE.loadLive(), changed = false;
+		var all = ENGINE.loadLive();
 		for (var id in all) {
-			if (all[id] && all[id].automation) { delete all[id].automation; changed = true; }
+			if (all[id] && all[id].automation) { delete all[id].automation; ENGINE.saveLive(all[id]); }
 		}
-		if (changed) localStorage.setItem('rodOtcLive', JSON.stringify(all));
 		setTimeout(function () {
 			var sessions = ENGINE.loadLive();
 			for (var swapId in sessions) {
@@ -3580,7 +3610,7 @@ $(function () {
 	}, 30000);
 	/* Generate random ROD name on every page load */
 	$('#nsOrderName').val('d/otc-swap/' + randomOrderNameSuffix());
-	refreshAltChainLabels();
+	refreshChainLabels();
 	refreshSwaps();
 	log('OTC swap app ready — Nostr connecting automatically');
 });

@@ -79,8 +79,9 @@ async function main() {
 
 		const scope = await page.evaluate(() => {
 			const walletNetworks = Object.keys(window.coinjs.networks).sort();
-			const otcChains = Object.keys(window.rodOtc.chains.definitions).sort();
-			const feeChains = Object.keys(window.rodOtc.swap.ALT_CHAIN_FEES).sort();
+			const otcChains = window.rodOtc.chains.codes();
+			const registryNetworks = window.spexChainRegistry.codes();
+			const registrySwapChains = window.spexChainRegistry.swapCodes();
 			const explorerSupport = {};
 			for (const code of walletNetworks) {
 				if (code === 'ROD') continue;
@@ -88,29 +89,81 @@ async function main() {
 			}
 			const menuCoins = Array.from(document.querySelectorAll('.walletCoinSelect'))
 				.map((node) => node.getAttribute('data-coin')).sort();
-			const otcOptions = Array.from(document.querySelectorAll('#nsAltChain option'))
+			const assetOptions = Array.from(document.querySelectorAll('#nsAssetChain option'))
 				.map((node) => node.value).filter(Boolean).sort();
-			return { walletNetworks, otcChains, feeChains, explorerSupport, menuCoins, otcOptions };
+			const paymentOptions = Array.from(document.querySelectorAll('#nsPaymentChain option'))
+				.map((node) => node.value).filter(Boolean).sort();
+			return { walletNetworks, otcChains, registryNetworks, registrySwapChains, explorerSupport, menuCoins, assetOptions, paymentOptions };
 		});
-		const expectedWallet = ['BCH', 'BTC', 'DGB', 'DOGE', 'LTC', 'ROD'];
 		step(
 			'wallet menu and registered wallet networks agree',
-			JSON.stringify(scope.walletNetworks) === JSON.stringify(expectedWallet) &&
-				JSON.stringify(scope.menuCoins) === JSON.stringify(expectedWallet),
+			JSON.stringify(scope.walletNetworks) === JSON.stringify(scope.registryNetworks) &&
+				JSON.stringify(scope.menuCoins) === JSON.stringify(scope.registryNetworks),
 			'networks=' + scope.walletNetworks.join(',') + ' menu=' + scope.menuCoins.join(',')
 		);
 		step(
-			'OTC scope is explicit and excludes wallet-only BTC/BCH/DGB',
-			JSON.stringify(scope.otcChains) === JSON.stringify(['DOGE', 'LTC', 'ROD']) &&
-				JSON.stringify(scope.feeChains) === JSON.stringify(['DOGE', 'LTC']) &&
-				JSON.stringify(scope.otcOptions) === JSON.stringify(['DOGE', 'LTC']),
-			'definitions=' + scope.otcChains.join(',') + ' fees=' + scope.feeChains.join(',') +
-				' selector=' + scope.otcOptions.join(',')
+			'one settlement registry drives both role selectors and excludes wallet-only BTC/BCH/DGB',
+			JSON.stringify(scope.otcChains) === JSON.stringify(scope.registrySwapChains) &&
+				JSON.stringify(scope.assetOptions) === JSON.stringify(scope.otcChains) &&
+				JSON.stringify(scope.paymentOptions) === JSON.stringify(scope.otcChains),
+			'definitions=' + scope.otcChains.join(',') + ' asset=' + scope.assetOptions.join(',') +
+				' payment=' + scope.paymentOptions.join(',')
 		);
 		step(
 			'every wallet-only explorer backend has a registered driver',
 			Object.values(scope.explorerSupport).every(Boolean),
 			JSON.stringify(scope.explorerSupport)
+		);
+
+		const settingsRegistry = await page.evaluate(() => {
+			const expected = window.spexChainRegistry.codes().map((code) => code.toLowerCase() + '-mainnet').sort();
+			const actual = Array.from(document.querySelectorAll('#coinjs_coin option'))
+				.map((node) => node.value)
+				.filter((value) => /-mainnet$/.test(value)).sort();
+			$('#coinjs_coin').val('dgb-mainnet').trigger('change');
+			$('#settingsBtn').trigger('click');
+			const collisionDispatch = coinjs.activeNetwork;
+			$('#coinjs_coin').val('rod-mainnet').trigger('change');
+			$('#settingsBtn').trigger('click');
+			return { expected, actual, collisionDispatch };
+		});
+		step(
+			'Settings mainnet dropdown is registry-driven and resolves colliding address prefixes by code',
+			JSON.stringify(settingsRegistry.actual) === JSON.stringify(settingsRegistry.expected) &&
+				settingsRegistry.collisionDispatch === 'DGB',
+			JSON.stringify(settingsRegistry)
+		);
+
+		const controlIdentity = await page.evaluate(() => {
+			coinjs.setNetwork('LTC');
+			const beforeCompressed = coinjs.compressed;
+			coinjs.compressed = true;
+			const keys = coinjs.newKeys();
+			coinjs.compressed = beforeCompressed;
+			$('#walletKeys .privkey').val(keys.wif);
+			$('#walletKeys .pubkey').val(keys.pubkey);
+			$('#walletAddress').text(keys.address);
+			const identity = rodOtc.engine.getWalletIdentity();
+			const expectedRod = rodOtc.chains.getWalletMaterialForChain(keys.wif, 'ROD').address;
+			const result = {
+				activeChain: identity && identity.activeChain,
+				activeAddress: identity && identity.activeAddress,
+				identityAddress: identity && identity.address,
+				expectedRod,
+				visibleLtc: keys.address
+			};
+			$('#walletKeys .privkey, #walletKeys .pubkey').val('');
+			$('#walletAddress').text('');
+			coinjs.setNetwork('ROD');
+			return result;
+		});
+		step(
+			'ROD control-plane identity remains ROD-bound while another wallet network is active',
+			controlIdentity.activeChain === 'LTC' &&
+				controlIdentity.identityAddress === controlIdentity.expectedRod &&
+				controlIdentity.activeAddress === controlIdentity.visibleLtc &&
+				controlIdentity.identityAddress !== controlIdentity.visibleLtc,
+			JSON.stringify(controlIdentity)
 		);
 
 		const defaults = await page.evaluate(() => {
@@ -144,19 +197,22 @@ async function main() {
 			try { C.publicKeyToAddress('DOGE', key1, 'bech32'); } catch (error) { dogeBech32Rejected = true; }
 			try { C.getPolicy('DGB'); } catch (error) { walletOnlyRejected = true; }
 			const ltcSafe = S.assertRefundOrdering({
-				altChain: 'LTC', refundRodHeight: 100480, altRefundLockHeight: 200024,
-				rodConfirmations: 1, altConfirmations: 1
-			}, 100000, 200000);
+				assetChain: 'ROD', paymentChain: 'LTC', releaseRodHeight: 100030,
+				assetRefundLockHeight: 100480, paymentRefundLockHeight: 200024,
+				assetConfirmations: 1, paymentConfirmations: 1
+			}, 100000, 200000, 100000);
 			const dogeSafe = S.assertRefundOrdering({
-				altChain: 'DOGE', refundRodHeight: 100480, altRefundLockHeight: 300060,
-				rodConfirmations: 1, altConfirmations: 6
-			}, 100000, 300000);
+				assetChain: 'ROD', paymentChain: 'DOGE', releaseRodHeight: 100030,
+				assetRefundLockHeight: 100480, paymentRefundLockHeight: 300060,
+				assetConfirmations: 1, paymentConfirmations: 6
+			}, 100000, 300000, 100000);
 			let unsafeRejected = false;
 			try {
 				S.assertRefundOrdering({
-					altChain: 'DOGE', refundRodHeight: 100480, altRefundLockHeight: 300470,
-					rodConfirmations: 1, altConfirmations: 6
-				}, 100000, 300000);
+					assetChain: 'ROD', paymentChain: 'DOGE', releaseRodHeight: 100030,
+					assetRefundLockHeight: 100480, paymentRefundLockHeight: 300470,
+					assetConfirmations: 1, paymentConfirmations: 6
+				}, 100000, 300000, 100000);
 			} catch (error) { unsafeRejected = true; }
 			return {
 				dogeAddress: C.publicKeyToAddress('DOGE', key1, 'legacy'),
@@ -185,8 +241,8 @@ async function main() {
 		);
 		step(
 			'refund wall-clock ordering accepts safe LTC/DOGE and rejects reversal',
-			chainChecks.ltcSafe.rodRemainingSeconds > chainChecks.ltcSafe.altRemainingSeconds &&
-				chainChecks.dogeSafe.rodRemainingSeconds > chainChecks.dogeSafe.altRemainingSeconds &&
+			chainChecks.ltcSafe.assetRemainingSeconds > chainChecks.ltcSafe.paymentRemainingSeconds &&
+				chainChecks.dogeSafe.assetRemainingSeconds > chainChecks.dogeSafe.paymentRemainingSeconds &&
 				chainChecks.unsafeRejected === true
 		);
 
@@ -198,12 +254,15 @@ async function main() {
 				role: 'seller',
 				state: 'COMPLETE',
 				terms: {
+					protocol: 2,
 					termsHash: 'browser-recovery-terms',
-					altChain: 'DOGE',
-					rodAmount: '1.00000000',
-					altAmount: '2.00000000'
+					pair: 'ROD/DOGE',
+					assetChain: 'ROD',
+					paymentChain: 'DOGE',
+					assetAmount: '1.00000000',
+					paymentAmount: '2.00000000'
 				},
-				rodRefund: { signedHex: 'aa'.repeat(120) }
+				assetRefund: { signedHex: 'aa'.repeat(120) }
 			});
 			const backup = engine.exportRecoveryState();
 			engine.removeLive(swapId);
@@ -217,7 +276,7 @@ async function main() {
 			const result = {
 				tracked,
 				state: restored && restored.state,
-				refundHex: restored && restored.rodRefund && restored.rodRefund.signedHex,
+				refundHex: restored && restored.assetRefund && restored.assetRefund.signedHex,
 				flash: $('#otcFlash').text(),
 				rendered: $('#otcSwapList').text()
 			};

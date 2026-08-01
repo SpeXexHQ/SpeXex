@@ -1,9 +1,9 @@
 /*
- * End-to-end ROD↔LTC OTC swap proof — v2 (refunds + adaptor settlement).
+ * End-to-end two-chain OTC swap proof — v2 (refunds + adaptor settlement).
  *
  * Runs the REAL wallet app (unmodified index.html + js/) in two headless
- * Chromium contexts — Alice (sells ROD, holds the adaptor secret) and Bob
- * (buys ROD with LTC) — wired to mock chain APIs that INDEPENDENTLY validate
+ * Chromium contexts — Alice (sells the asset, holds the adaptor secret) and
+ * Bob (buys it with the payment coin) — wired to mock chain APIs that independently validate
  * every broadcast transaction (bitcoinjs-lib sighash + noble secp256k1,
  * nLockTime finality, min-relay fees, dust) and a real local NIP-01 relay.
  *
@@ -26,7 +26,7 @@
  *   2. Bob requires 3 ROD confirmations (mock height frozen → he never funds
  *      LTC — proves the confirmation gate) and then disappears.
  *   3. Alice's refund is rejected as non-final before the lock height.
- *   4. Mock chain advances past refundRodHeight → Alice's automation
+ *   4. Mock chain advances past assetRefundLockHeight → Alice's automation
  *      broadcasts the pre-signed refund; the mock validates locktime + both
  *      CHECKMULTISIG signatures; funds return to Alice; state = REFUNDED.
  *
@@ -38,7 +38,8 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
-const { MockChain, rodApiServer, esploraServer, blockcypherServer, nostrRelay, staticServer } = require('./mock-infra');
+const CHAIN_REGISTRY = require('../../js/chain-registry.js');
+const { MockChain, rodApiServer, esploraServer, blockcypherServer, blockchairServer, nostrRelay, staticServer } = require('./mock-infra');
 
 const APP_DIR = process.env.APP_DIR || path.resolve(__dirname, '..', '..');
 const SCENARIO = process.env.SCENARIO || 'happy';
@@ -47,58 +48,65 @@ if (HARNESS_REPEAT_INDEX && !/^[1-9][0-9]*$/.test(HARNESS_REPEAT_INDEX)) {
   throw new Error('HARNESS_REPEAT_INDEX must be a positive integer');
 }
 const REPORT_REPEAT_SUFFIX = HARNESS_REPEAT_INDEX ? `-repeat-${HARNESS_REPEAT_INDEX}` : '';
-/* Which chain the counter leg runs on. Everything below is derived from this,
-   so the identical proof runs against Litecoin-over-Esplora and
-   Dogecoin-over-BlockCypher — different version bytes, different fee and dust
-   policy, and a different API shape. */
-const ALT = (process.env.ALT_CHAIN || 'LTC').toUpperCase();
-const SUPPORTED_ALT_CHAINS = ['LTC', 'DOGE'];
-if (!SUPPORTED_ALT_CHAINS.includes(ALT)) {
+/* Asset/payment are per-swap roles. ALT_CHAIN remains a compatibility alias
+   for older invocations, but no test role is structurally tied to ROD. */
+const ASSET = (process.env.ASSET_CHAIN || 'ROD').toUpperCase();
+const PAYMENT = (process.env.PAYMENT_CHAIN || process.env.ALT_CHAIN || 'LTC').toUpperCase();
+const ALT = PAYMENT;
+const SUPPORTED_SWAP_CHAINS = CHAIN_REGISTRY.swapCodes();
+if (!SUPPORTED_SWAP_CHAINS.includes(ASSET) || !SUPPORTED_SWAP_CHAINS.includes(PAYMENT) || ASSET === PAYMENT) {
   throw new Error(
-    `ALT_CHAIN=${ALT} is wallet-only or unsupported by this release's OTC registry; ` +
-    `supported swap counters are ${SUPPORTED_ALT_CHAINS.join(', ')}`
+    `Unsupported settlement pair ${ASSET}/${PAYMENT}; distinct certified chains are ` +
+    `${SUPPORTED_SWAP_CHAINS.join(', ')}`
   );
 }
 
-const ALT_PROFILES = {
-  LTC: {
-    /* 0.05 LTC is deliberately under 0.21 LTC (21,000,000 sats): that range is
-       what the historical satoshi/coin unit bug mis-read as coin-denominated. */
-    amount: '0.05000000',
-    claimFee: 1000,
-    refundBlocks: 24,
-    confirmations: 1,
-    apiType: 'esplora',
-    apiPath: '/api',
-    startServer: (chain, port) => esploraServer(chain, port)
-  },
-  DOGE: {
-    /* 500 DOGE. Dogecoin's dust limits are ABSOLUTE (0.001 DOGE hard,
-       0.01 DOGE soft), so amounts are chosen to sit clear of both while the
-       0.01 DOGE settlement fee still clears the 1000 koinu/B mining floor for
-       a ~305-byte 2-of-2 P2SH spend. */
-    amount: '500.00000000',
-    claimFee: 1000000,
-    refundBlocks: 60,
-    confirmations: 6,
-    apiType: 'blockcypher',
-    apiPath: '',
-    startServer: (chain, port) => blockcypherServer(chain, port)
-  }
+const MOCK_SERVER_BY_API_TYPE = {
+  rod: rodApiServer,
+  esplora: esploraServer,
+  blockcypher: blockcypherServer,
+  blockchair: blockchairServer
 };
-const ALT_PROFILE = ALT_PROFILES[ALT];
-if (!ALT_PROFILE) throw new Error('Unsupported ALT_CHAIN: ' + ALT);
+const MOCK_API_PATH_BY_TYPE = { rod: '', esplora: '/api', blockcypher: '', blockchair: '' };
 
-const PORTS = { app: 9300, rod: 9301, alt: 9302, relay: 9303 };
-const ROD_AMOUNT = '100.00000000';
+function decimalToBaseUnits(value) {
+  const parts = String(value).split('.');
+  return Number(parts[0]) * 1e8 + Number(((parts[1] || '') + '00000000').slice(0, 8));
+}
+
+function harnessProfile(code) {
+  const profile = CHAIN_REGISTRY.getProfile(code);
+  const swap = profile.swap;
+  const startServer = MOCK_SERVER_BY_API_TYPE[profile.api.type];
+  if (!startServer) {
+    throw new Error(`Certified chain ${code} uses ${profile.api.type}, but the proof harness has no mock server for that API type`);
+  }
+  return {
+    amount: swap.certification.testAmount,
+    claimFee: decimalToBaseUnits(swap.fees.claim),
+    refundBlocks: swap.refundBlocks.payment,
+    assetRefundBlocks: swap.refundBlocks.asset,
+    confirmations: swap.confirmations,
+    apiType: profile.api.type,
+    apiPath: MOCK_API_PATH_BY_TYPE[profile.api.type] || '',
+    startServer: (chain, port) => startServer(chain, port)
+  };
+}
+
+const CONTROL_PROFILE = harnessProfile('ROD');
+const ROD_PROFILE = harnessProfile(ASSET);
+const ALT_PROFILE = harnessProfile(ALT);
+
+const PORTS = { app: 9300, rod: 9301, asset: 9302, relay: 9303, alt: 9304 };
+const ROD_AMOUNT = ROD_PROFILE.amount;
 const ALT_AMOUNT = ALT_PROFILE.amount;
 const START_HEIGHT = 500000;
 const RELEASE_HEIGHT = 500002;
-const REFUND_ROD_BLOCKS = 480;  // 4h at ROD's 30-second target spacing
-const ALT_REFUND_BLOCKS = ALT_PROFILE.refundBlocks;
-const ROD_CLAIM_FEE = 51900;
+const REFUND_ROD_BLOCKS = ROD_PROFILE.assetRefundBlocks;
+const PAYMENT_REFUND_BLOCKS = ALT_PROFILE.refundBlocks;
+const ROD_CLAIM_FEE = ROD_PROFILE.claimFee;
 const ALT_CLAIM_FEE = ALT_PROFILE.claimFee;
-const ROD_REFUND_FEE = 51900;
+const ASSET_REFUND_FEE = decimalToBaseUnits(CHAIN_REGISTRY.getProfile(ASSET).swap.fees.refund);
 const ALT_AMOUNT_SATS = Math.round(parseFloat(ALT_AMOUNT) * 1e8);
 const PROTOCOL_STAGE_TIMEOUT_MS = Number(process.env.PROTOCOL_STAGE_TIMEOUT_MS || 45000);
 if (!Number.isSafeInteger(PROTOCOL_STAGE_TIMEOUT_MS) || PROTOCOL_STAGE_TIMEOUT_MS < 5000) {
@@ -111,7 +119,8 @@ const runtime = {
   alice: null,
   bob: null,
   rodChain: null,
-  altChain: null,
+  controlRodChain: null,
+  paymentChain: null,
   relay: null,
   servers: [],
   swapId: '',
@@ -128,7 +137,7 @@ function step(name, ok, detail) {
 function expectedTransientApiResponse(urlValue, status) {
   if (status !== 404) return false;
   const url = new URL(urlValue);
-  if (url.hostname !== '127.0.0.1' || Number(url.port) !== PORTS.alt) return false;
+  if (url.hostname !== '127.0.0.1' || ![PORTS.asset, PORTS.alt].includes(Number(url.port))) return false;
   return /^\/api\/tx\/[0-9a-f]{64}(?:\/hex)?$/i.test(url.pathname) ||
     /^\/txs\/[0-9a-f]{64}$/i.test(url.pathname);
 }
@@ -139,8 +148,7 @@ function expectedDeliberateReloadAbort(label, request) {
   if (!failure || failure.errorText !== 'net::ERR_ABORTED') return false;
   const url = new URL(request.url());
   return url.hostname === '127.0.0.1' &&
-    Number(url.port) === PORTS.rod &&
-    url.pathname === '/info';
+    [PORTS.rod, PORTS.asset, PORTS.alt].includes(Number(url.port));
 }
 
 function rejectUnsafeChromiumArgs(args) {
@@ -195,25 +203,25 @@ async function sessionProtocolState(page, swapId) {
       remoteAccepted: !!s.remoteAccepted,
       bilateralReady: !!s.bilateralReady,
       adaptorPoint: s.adaptorPoint || '',
-      plannedRodFunding: !!(s.plannedRodFunding && s.plannedRodFunding.txid),
-      plannedAltFunding: !!(s.plannedAltFunding && s.plannedAltFunding.txid),
-      rodRefundLocalSig: !!(s.rodRefund && s.rodRefund.localSig),
-      rodRefundSigned: !!(s.rodRefund && s.rodRefund.signedHex),
-      rodRefundCosigned: !!s.rodRefundCosigned,
-      altRefundLocalSig: !!(s.altRefund && s.altRefund.localSig),
-      altRefundSigned: !!(s.altRefund && s.altRefund.signedHex),
-      altRefundCosigned: !!s.altRefundCosigned,
-      localRodAdaptorSignature: !!s.localRodAdaptorSignature,
-      remoteRodAdaptorSignature: !!s.remoteRodAdaptorSignature,
-      localAltAdaptorSignature: !!s.localAltAdaptorSignature,
-      remoteAltAdaptorSignature: !!s.remoteAltAdaptorSignature,
+      plannedAssetFunding: !!(s.plannedAssetFunding && s.plannedAssetFunding.txid),
+      plannedPaymentFunding: !!(s.plannedPaymentFunding && s.plannedPaymentFunding.txid),
+      assetRefundLocalSig: !!(s.assetRefund && s.assetRefund.localSig),
+      assetRefundSigned: !!(s.assetRefund && s.assetRefund.signedHex),
+      assetRefundCosigned: !!s.assetRefundCosigned,
+      paymentRefundLocalSig: !!(s.paymentRefund && s.paymentRefund.localSig),
+      paymentRefundSigned: !!(s.paymentRefund && s.paymentRefund.signedHex),
+      paymentRefundCosigned: !!s.paymentRefundCosigned,
+      localAssetAdaptorSignature: !!s.localAssetAdaptorSignature,
+      remoteAssetAdaptorSignature: !!s.remoteAssetAdaptorSignature,
+      localPaymentAdaptorSignature: !!s.localPaymentAdaptorSignature,
+      remotePaymentAdaptorSignature: !!s.remotePaymentAdaptorSignature,
       localPrepared: !!s.localPrepared,
       remotePrepared: !!s.remotePrepared,
       pending: {
-        rodRefundSig: !!s._pendingRodRefundSig,
-        rodRefundCosig: !!s._pendingRodRefundCosig,
-        altRefundSig: !!s._pendingAltRefundSig,
-        altRefundCosig: !!s._pendingAltRefundCosig,
+        assetRefundSig: !!s._pendingAssetRefundSig,
+        assetRefundCosig: !!s._pendingAssetRefundCosig,
+        paymentRefundSig: !!s._pendingPaymentRefundSig,
+        paymentRefundCosig: !!s._pendingPaymentRefundCosig,
         rodAdaptorSig: !!s._pendingRodAdaptorSig,
         altAdaptorSig: !!s._pendingAltAdaptorSig
       }
@@ -245,18 +253,18 @@ function missingPreparedPrerequisites(session) {
   need(session.remoteAccepted, 'remoteAccepted');
   need(session.bilateralReady, 'bilateralReady');
   need(session.adaptorPoint, 'adaptorPoint');
-  need(session.plannedRodFunding, 'plannedRodFunding');
-  need(session.plannedAltFunding, 'plannedAltFunding');
+  need(session.plannedAssetFunding, 'plannedAssetFunding');
+  need(session.plannedPaymentFunding, 'plannedPaymentFunding');
   if (session.role === 'seller') {
-    need(session.rodRefundSigned, 'rodRefund.signedHex');
-    need(session.altRefundCosigned, 'altRefundCosigned');
-    need(session.localRodAdaptorSignature, 'localRodAdaptorSignature');
-    need(session.remoteAltAdaptorSignature, 'remoteAltAdaptorSignature');
+    need(session.assetRefundSigned, 'assetRefund.signedHex');
+    need(session.paymentRefundCosigned, 'paymentRefundCosigned');
+    need(session.localAssetAdaptorSignature, 'localAssetAdaptorSignature');
+    need(session.remotePaymentAdaptorSignature, 'remotePaymentAdaptorSignature');
   } else if (session.role === 'buyer') {
-    need(session.altRefundSigned, 'altRefund.signedHex');
-    need(session.rodRefundCosigned, 'rodRefundCosigned');
-    need(session.localAltAdaptorSignature, 'localAltAdaptorSignature');
-    need(session.remoteRodAdaptorSignature, 'remoteRodAdaptorSignature');
+    need(session.paymentRefundSigned, 'paymentRefund.signedHex');
+    need(session.assetRefundCosigned, 'assetRefundCosigned');
+    need(session.localPaymentAdaptorSignature, 'localPaymentAdaptorSignature');
+    need(session.remoteAssetAdaptorSignature, 'remoteAssetAdaptorSignature');
   } else {
     missing.push('valid role');
   }
@@ -312,10 +320,10 @@ async function sessionDiagnostics(page, swapId) {
       hasSignedHex: !!value.signedHex
     } : null;
     const pending = session ? {
-      rodRefundSig: bool(session._pendingRodRefundSig),
-      rodRefundCosig: bool(session._pendingRodRefundCosig),
-      altRefundSig: bool(session._pendingAltRefundSig),
-      altRefundCosig: bool(session._pendingAltRefundCosig),
+      assetRefundSig: bool(session._pendingAssetRefundSig),
+      assetRefundCosig: bool(session._pendingAssetRefundCosig),
+      paymentRefundSig: bool(session._pendingPaymentRefundSig),
+      paymentRefundCosig: bool(session._pendingPaymentRefundCosig),
       rodAdaptorSig: bool(session._pendingRodAdaptorSig),
       altAdaptorSig: bool(session._pendingAltAdaptorSig)
     } : {};
@@ -332,16 +340,16 @@ async function sessionDiagnostics(page, swapId) {
         localPrepared: !!session.localPrepared,
         remotePrepared: !!session.remotePrepared,
         hasAdaptorPoint: !!session.adaptorPoint,
-        plannedRodFunding: funding(session.plannedRodFunding),
-        plannedAltFunding: funding(session.plannedAltFunding),
-        rodRefund: refund(session.rodRefund),
-        altRefund: refund(session.altRefund),
-        rodRefundCosigned: !!session.rodRefundCosigned,
-        altRefundCosigned: !!session.altRefundCosigned,
-        hasLocalRodAdaptorSignature: !!session.localRodAdaptorSignature,
-        hasRemoteRodAdaptorSignature: !!session.remoteRodAdaptorSignature,
-        hasLocalAltAdaptorSignature: !!session.localAltAdaptorSignature,
-        hasRemoteAltAdaptorSignature: !!session.remoteAltAdaptorSignature,
+        plannedAssetFunding: funding(session.plannedAssetFunding),
+        plannedPaymentFunding: funding(session.plannedPaymentFunding),
+        assetRefund: refund(session.assetRefund),
+        paymentRefund: refund(session.paymentRefund),
+        assetRefundCosigned: !!session.assetRefundCosigned,
+        paymentRefundCosigned: !!session.paymentRefundCosigned,
+        hasLocalRodAdaptorSignature: !!session.localAssetAdaptorSignature,
+        hasRemoteRodAdaptorSignature: !!session.remoteAssetAdaptorSignature,
+        hasLocalAltAdaptorSignature: !!session.localPaymentAdaptorSignature,
+        hasRemoteAltAdaptorSignature: !!session.remotePaymentAdaptorSignature,
         pending,
         localNostrPubkey: session.localNostrPubkey || '',
         remoteNostrPubkey: session.remoteNostrPubkey || '',
@@ -407,53 +415,77 @@ async function assertPeerIdentityIsolation(alice, bob, aliceWallet, bobWallet, a
 }
 
 async function main() {
-  const rodChain = new MockChain('ROD');
-  const altChain = new MockChain(ALT);
+  const rodChain = new MockChain(ASSET);
+  const paymentChain = new MockChain(ALT);
+  const controlRodChain = ASSET === 'ROD' ? rodChain : (ALT === 'ROD' ? paymentChain : new MockChain('ROD'));
   runtime.rodChain = rodChain;
-  runtime.altChain = altChain;
+  runtime.paymentChain = paymentChain;
+  runtime.controlRodChain = controlRodChain;
   rodChain.height = START_HEIGHT;
-  altChain.height = START_HEIGHT;
-  runtime.servers.push(await rodApiServer(rodChain, PORTS.rod));
-  runtime.servers.push(await ALT_PROFILE.startServer(altChain, PORTS.alt));
+  paymentChain.height = START_HEIGHT;
+  controlRodChain.height = START_HEIGHT;
+  runtime.servers.push(await rodApiServer(controlRodChain, PORTS.rod));
+  if (ASSET !== 'ROD') runtime.servers.push(await ROD_PROFILE.startServer(rodChain, PORTS.asset));
+  if (ALT !== 'ROD') runtime.servers.push(await ALT_PROFILE.startServer(paymentChain, PORTS.alt));
   const relay = nostrRelay(PORTS.relay);
   runtime.relay = relay;
   runtime.servers.push(await staticServer(APP_DIR, PORTS.app));
-  console.log(`mock servers up · scenario=${SCENARIO} · alt=${ALT} via ${ALT_PROFILE.apiType} · app=${APP_DIR}`);
+  console.log(`mock servers up · scenario=${SCENARIO} · pair=${ASSET}/${ALT} · app=${APP_DIR}`);
 
-  const rodConfirmationsCfg = SCENARIO === 'refund' ? 3 : 1;
+  const assetConfirmationsCfg = SCENARIO === 'refund' ? 3 : 1;
 
   const browser = await chromium.launch(resolveChromiumLaunchOptions());
   runtime.browser = browser;
   const mkContext = async (label) => {
     const contextId = `${label}-${process.pid}-${crypto.randomBytes(12).toString('hex')}`;
     const ctx = await browser.newContext({ serviceWorkers: 'block' });
-    await ctx.addInitScript(({ rodPort, altPort, relayPort, rodConfs, altCode, altType, altPath, altRefundBlocks, altConfirmations, harnessContextId }) => {
-      const altUrl = 'http://127.0.0.1:' + altPort + altPath;
-      const altChains = {};
-      altChains[altCode] = {
-        apiUrl: altUrl,
-        apiType: altType,
-        refundBlocks: altRefundBlocks,
-        confirmations: altConfirmations
+    await ctx.addInitScript(({ rodPort, assetPort, altPort, relayPort, controlAssetRefundBlocks, controlPaymentRefundBlocks, controlConfirmations, assetCode, assetType, assetPath, assetConfirmations, altCode, altType, altPath, assetRefundBlocks, assetPaymentRefundBlocks, paymentAssetRefundBlocks, paymentRefundBlocks, paymentConfirmations, harnessContextId }) => {
+      const chainUrl = (code, port, suffix) => code === 'ROD'
+        ? 'http://127.0.0.1:' + rodPort
+        : 'http://127.0.0.1:' + port + suffix;
+      const chains = {
+        ROD: {
+          apiUrl: 'http://127.0.0.1:' + rodPort,
+          apiType: 'rod',
+          refundBlocks: { asset: controlAssetRefundBlocks, payment: controlPaymentRefundBlocks },
+          confirmations: controlConfirmations
+        }
       };
-      localStorage.setItem('rodOtcEngineConfig', JSON.stringify({
-        rodApiUrl: 'http://127.0.0.1:' + rodPort,
-        altApiUrl: altUrl,
-        altChains: altChains,
+      chains[assetCode] = {
+        apiUrl: chainUrl(assetCode, assetPort, assetPath),
+        apiType: assetType,
+        refundBlocks: { asset: assetRefundBlocks, payment: assetPaymentRefundBlocks },
+        confirmations: assetConfirmations
+      };
+      chains[altCode] = {
+        apiUrl: chainUrl(altCode, altPort, altPath),
+        apiType: altType,
+        refundBlocks: {
+          asset: paymentAssetRefundBlocks,
+          payment: paymentRefundBlocks
+        },
+        confirmations: paymentConfirmations
+      };
+      localStorage.setItem('spexSwapV2Config', JSON.stringify({
+        chains: chains,
         relays: ['ws://127.0.0.1:' + relayPort],
         releaseBlocks: 2,
-        refundRodBlocks: 480,
-        altRefundBlocks: altRefundBlocks,
-        rodConfirmations: rodConfs,
-        altConfirmations: altConfirmations,
         tickMs: 1500
       }));
-      localStorage.setItem('rodOtcTestAltChain', altCode);
+      localStorage.setItem('rodOtcTestAssetChain', assetCode);
+      localStorage.setItem('rodOtcTestPaymentChain', altCode);
       localStorage.setItem('rodOtcHarnessContextId', harnessContextId);
     }, {
-      rodPort: PORTS.rod, altPort: PORTS.alt, relayPort: PORTS.relay, rodConfs: rodConfirmationsCfg,
+      rodPort: PORTS.rod, assetPort: PORTS.asset, altPort: PORTS.alt, relayPort: PORTS.relay,
+      controlAssetRefundBlocks: CONTROL_PROFILE.assetRefundBlocks,
+      controlPaymentRefundBlocks: CONTROL_PROFILE.refundBlocks,
+      controlConfirmations: CONTROL_PROFILE.confirmations,
+      assetCode: ASSET, assetType: ROD_PROFILE.apiType, assetPath: ROD_PROFILE.apiPath,
+      assetConfirmations: assetConfirmationsCfg,
       altCode: ALT, altType: ALT_PROFILE.apiType, altPath: ALT_PROFILE.apiPath,
-      altRefundBlocks: ALT_REFUND_BLOCKS, altConfirmations: ALT_PROFILE.confirmations,
+      assetRefundBlocks: ROD_PROFILE.assetRefundBlocks, assetPaymentRefundBlocks: ROD_PROFILE.refundBlocks,
+      paymentAssetRefundBlocks: ALT_PROFILE.assetRefundBlocks,
+      paymentRefundBlocks: PAYMENT_REFUND_BLOCKS, paymentConfirmations: ALT_PROFILE.confirmations,
       harnessContextId: contextId
     });
     const page = await ctx.newPage();
@@ -514,10 +546,14 @@ async function main() {
     $('#walletKeys .pubkey').val(keys.pubkey);
     $('#walletAddress').text(keys.address);
     const prevNet = coinjs.activeNetwork;
-    coinjs.setNetwork(localStorage.getItem('rodOtcTestAltChain') || 'LTC');
-    const altAddress = coinjs.wif2address(keys.wif).address;
+    const addressFor = (code) => {
+      coinjs.setNetwork(code);
+      return coinjs.wif2address(keys.wif).address;
+    };
+    const assetAddress = addressFor(localStorage.getItem('rodOtcTestAssetChain') || 'ROD');
+    const altAddress = addressFor(localStorage.getItem('rodOtcTestPaymentChain') || 'LTC');
     coinjs.setNetwork(prevNet || 'ROD');
-    return { address: keys.address, altAddress, pubkey: keys.pubkey, wif: keys.wif };
+    return { address: keys.address, assetAddress, altAddress, pubkey: keys.pubkey, wif: keys.wif };
   });
   const setWallet = (page, wallet) => page.evaluate((w) => {
     $('#walletKeys .privkey').val(w.wif);
@@ -527,13 +563,15 @@ async function main() {
   }, wallet);
   const aliceWallet = await mkWallet(alice);
   const bobWallet = await mkWallet(bob);
-  console.log('alice ROD addr', aliceWallet.address, '| bob ROD addr', bobWallet.address, `| bob ${ALT} addr`, bobWallet.altAddress);
+  console.log('alice ROD identity', aliceWallet.address, `| alice ${ASSET} addr`, aliceWallet.assetAddress,
+    '| bob ROD identity', bobWallet.address, `| bob ${ALT} addr`, bobWallet.altAddress);
 
-  rodChain.credit(aliceWallet.address, 2000 * 1e8);
+  const assetAmountSats = Math.round(parseFloat(ROD_AMOUNT) * 1e8);
+  rodChain.credit(aliceWallet.assetAddress, Math.max(assetAmountSats * 4, 2000 * 1e8));
   /* Two UTXOs, sized relative to the swap amount so the same multi-input
      selection path is exercised on every alt chain. */
-  altChain.credit(bobWallet.altAddress, ALT_AMOUNT_SATS * 4);
-  altChain.credit(bobWallet.altAddress, Math.round(ALT_AMOUNT_SATS * 0.6));
+  paymentChain.credit(bobWallet.altAddress, ALT_AMOUNT_SATS * 4);
+  paymentChain.credit(bobWallet.altAddress, Math.round(ALT_AMOUNT_SATS * 0.6));
 
   for (const [label, page] of [['alice', alice], ['bob', bob]]) {
     const suite = await page.evaluate(() => rodOtc.validation.runAll());
@@ -559,21 +597,22 @@ async function main() {
   await assertPeerIdentityIsolation(alice, bob, aliceWallet, bobWallet, aliceXpub, bobXpub);
 
   // ---- Alice creates & starts the swap ----
-  await alice.evaluate(({ rod, alt, altCode, peerXpub, peerRodIdentity, peerRodPayout, release }) => {
+  await alice.evaluate(({ rod, alt, assetCode, altCode, peerXpub, peerRodIdentity, peerAssetPayout, release }) => {
     /* Select the counter chain FIRST: fees, dust limits, refund block counts
        and the payout address all derive from it. */
-    $('#nsAltChain').val(altCode).trigger('change');
+    $('#nsAssetChain').val(assetCode);
+    $('#nsPaymentChain').val(altCode).trigger('change');
     $('#nsRole').val('seller');
     $('#nsRod').val(rod);
     $('#nsAlt').val(alt);
     $('#nsRelease').val(String(release));
     $('#nsPeer').val(peerRodIdentity);
     $('#nsPeerXpub').val(peerXpub);
-    $('#nsPeerPayoutAddr').val(peerRodPayout);
+    $('#nsPeerPayoutAddr').val(peerAssetPayout);
     $('#nsCreate').click();
   }, {
-    rod: ROD_AMOUNT, alt: ALT_AMOUNT, altCode: ALT, peerXpub: bobXpub,
-    peerRodIdentity: bobWallet.address, peerRodPayout: bobWallet.address,
+    rod: ROD_AMOUNT, alt: ALT_AMOUNT, assetCode: ASSET, altCode: ALT, peerXpub: bobXpub,
+    peerRodIdentity: bobWallet.address, peerAssetPayout: bobWallet.assetAddress,
     release: RELEASE_HEIGHT
   });
 
@@ -585,21 +624,21 @@ async function main() {
   const termsCheck = await alice.evaluate((id) => {
     const s = rodOtc.engine.restoreLive(id);
     return {
-      refundRodHeight: s.terms.refundRodHeight,
-      altRefundLockHeight: s.terms.altRefundLockHeight,
-      rodConfirmations: s.terms.rodConfirmations,
-      altConfirmations: s.terms.altConfirmations,
-      sellerRodRefundAddress: s.terms.sellerRodRefundAddress,
-      buyerAltRefundAddress: s.terms.buyerAltRefundAddress,
+      assetRefundLockHeight: s.terms.assetRefundLockHeight,
+      paymentRefundLockHeight: s.terms.paymentRefundLockHeight,
+      assetConfirmations: s.terms.assetConfirmations,
+      paymentConfirmations: s.terms.paymentConfirmations,
+      sellerAssetRefundAddress: s.terms.sellerAssetRefundAddress,
+      buyerPaymentRefundAddress: s.terms.buyerPaymentRefundAddress,
       nonce: s.terms.termsNonce
     };
   }, swapId);
   step('terms include refund heights + confirmations + 5-field swapId nonce',
-    termsCheck.refundRodHeight === START_HEIGHT + REFUND_ROD_BLOCKS &&
-    termsCheck.altRefundLockHeight === START_HEIGHT + ALT_REFUND_BLOCKS &&
-    termsCheck.rodConfirmations === rodConfirmationsCfg &&
-    termsCheck.altConfirmations === ALT_PROFILE.confirmations &&
-    !!termsCheck.sellerRodRefundAddress && !!termsCheck.buyerAltRefundAddress && !!termsCheck.nonce,
+    termsCheck.assetRefundLockHeight === START_HEIGHT + REFUND_ROD_BLOCKS &&
+    termsCheck.paymentRefundLockHeight === START_HEIGHT + PAYMENT_REFUND_BLOCKS &&
+    termsCheck.assetConfirmations === assetConfirmationsCfg &&
+    termsCheck.paymentConfirmations === ALT_PROFILE.confirmations &&
+    !!termsCheck.sellerAssetRefundAddress && !!termsCheck.buyerPaymentRefundAddress && !!termsCheck.nonce,
     JSON.stringify(termsCheck));
 
   try {
@@ -611,7 +650,7 @@ async function main() {
     const diagnostics = await bob.evaluate((id) => ({
       flash: $('#otcFlash').text(),
       log: $('#otcLog').text(),
-      seenEventIds: JSON.parse(localStorage.getItem('rodOtcSeenEventIds') || '[]'),
+      seenEventIds: JSON.parse(localStorage.getItem('spexSwapV2SeenEventIds') || '[]'),
       liveSwapIds: Object.keys(rodOtc.engine.loadLive()),
       tracked: !!(rodOtc.engine.trackedSwapIds && rodOtc.engine.trackedSwapIds[id])
     }), swapId);
@@ -641,14 +680,14 @@ async function main() {
   await waitForProtocolStage('adaptor-point commitment received by both peers', (a, b) =>
     a.adaptorPoint && b.adaptorPoint && a.adaptorPoint === b.adaptorPoint);
   await waitForProtocolStage('both planned funding transactions exchanged', (a, b) =>
-    a.plannedRodFunding && a.plannedAltFunding &&
-    b.plannedRodFunding && b.plannedAltFunding);
+    a.plannedAssetFunding && a.plannedPaymentFunding &&
+    b.plannedAssetFunding && b.plannedPaymentFunding);
   await waitForProtocolStage('both timelocked refund exchanges completed', (a, b) =>
-    a.role === 'seller' && a.rodRefundSigned && a.altRefundCosigned &&
-    b.role === 'buyer' && b.rodRefundCosigned && b.altRefundSigned);
+    a.role === 'seller' && a.assetRefundSigned && a.paymentRefundCosigned &&
+    b.role === 'buyer' && b.assetRefundCosigned && b.paymentRefundSigned);
   await waitForProtocolStage('both claim adaptor signatures exchanged and verified', (a, b) =>
-    a.localRodAdaptorSignature && a.remoteAltAdaptorSignature &&
-    b.localAltAdaptorSignature && b.remoteRodAdaptorSignature);
+    a.localAssetAdaptorSignature && a.remotePaymentAdaptorSignature &&
+    b.localPaymentAdaptorSignature && b.remoteAssetAdaptorSignature);
   await waitForProtocolStage('both peers persisted local PREPARED', (a, b) =>
     a.localPrepared && b.localPrepared);
   await waitForProtocolStage('both peers observed counterparty PREPARED', (a, b) =>
@@ -657,20 +696,20 @@ async function main() {
 
   const aliceRefund = await alice.evaluate((id) => {
     const s = rodOtc.engine.restoreLive(id);
-    return { signedHex: s.rodRefund.signedHex, lockHeight: s.rodRefund.lockHeight, plannedTxid: s.plannedRodFunding.txid };
+    return { signedHex: s.assetRefund.signedHex, lockHeight: s.assetRefund.lockHeight, plannedTxid: s.plannedAssetFunding.txid };
   }, swapId);
   const bobRefund = await bob.evaluate((id) => {
     const s = rodOtc.engine.restoreLive(id);
-    return { signedHex: s.altRefund.signedHex, lockHeight: s.altRefund.lockHeight, plannedTxid: s.plannedAltFunding.txid };
+    return { signedHex: s.paymentRefund.signedHex, lockHeight: s.paymentRefund.lockHeight, plannedTxid: s.plannedPaymentFunding.txid };
   }, swapId);
   step('refund locktimes match terms',
-    aliceRefund.lockHeight === START_HEIGHT + REFUND_ROD_BLOCKS && bobRefund.lockHeight === START_HEIGHT + ALT_REFUND_BLOCKS,
-    `ROD refund locks at ${aliceRefund.lockHeight}, ${ALT} refund locks at ${bobRefund.lockHeight}`);
+    aliceRefund.lockHeight === START_HEIGHT + REFUND_ROD_BLOCKS && bobRefund.lockHeight === START_HEIGHT + PAYMENT_REFUND_BLOCKS,
+    `${ASSET} refund locks at ${aliceRefund.lockHeight}, ${ALT} refund locks at ${bobRefund.lockHeight}`);
 
   if (SCENARIO === 'happy') {
     await runHappyPath();
   } else if (SCENARIO === 'altrefund') {
-    await runAltRefundPath();
+    await runPaymentRefundPath();
   } else {
     await runRefundPath();
   }
@@ -678,12 +717,12 @@ async function main() {
   step('no unexpected browser console, page, request, or HTTP errors',
     runtime.browserIssues.length === 0, JSON.stringify(runtime.browserIssues));
 
-  fs.writeFileSync(path.join(__dirname, `e2e-report-${ALT.toLowerCase()}-${SCENARIO}${REPORT_REPEAT_SUFFIX}.json`), JSON.stringify({
+  fs.writeFileSync(path.join(__dirname, `e2e-report-${ASSET.toLowerCase()}-${ALT.toLowerCase()}-${SCENARIO}${REPORT_REPEAT_SUFFIX}.json`), JSON.stringify({
     scenario: SCENARIO,
     swapId,
     steps: results.steps,
-    rodBroadcasts: rodChain.broadcasts,
-    altBroadcasts: altChain.broadcasts,
+    assetBroadcasts: rodChain.broadcasts,
+    paymentBroadcasts: paymentChain.broadcasts,
     browserIssues: runtime.browserIssues,
     expectedReloadAborts: runtime.expectedReloadAborts,
     relayDiagnostics: relayDiagnostics(swapId),
@@ -699,42 +738,42 @@ async function main() {
 
   /* ================= happy path ================= */
   async function runHappyPath() {
-    // ROD funding must appear AND match the planned txid
-    await waitFor(() => rodChain.broadcasts.length > 0 || null, 60000, 'ROD funding broadcast');
-    const rodFundingB = rodChain.broadcasts[0];
-    step('ROD funding tx broadcast & independently validated', rodFundingB.valid, rodFundingB.details.join(' | '));
-    step('ROD funding txid equals PLANNED txid (refunds/adaptor sigs bind to it)', rodFundingB.txid === aliceRefund.plannedTxid,
-      `${rodFundingB.txid.slice(0, 16)}… vs planned ${aliceRefund.plannedTxid.slice(0, 16)}…`);
+    // Asset funding must appear AND match the planned txid
+    await waitFor(() => rodChain.broadcasts.length > 0 || null, 60000, `${ASSET} funding broadcast`);
+    const assetFundingB = rodChain.broadcasts[0];
+    step(`${ASSET} funding tx broadcast & independently validated`, assetFundingB.valid, assetFundingB.details.join(' | '));
+    step(`${ASSET} funding txid equals PLANNED txid (refunds/adaptor sigs bind to it)`, assetFundingB.txid === aliceRefund.plannedTxid,
+      `${assetFundingB.txid.slice(0, 16)}… vs planned ${aliceRefund.plannedTxid.slice(0, 16)}…`);
 
     // Alice's refund must be REJECTED before its lock height (direct probe;
     // rejection is NOT recorded as a broadcast attempt)
     const probe = rodChain.validateAndAccept(aliceRefund.signedHex);
-    step('pre-signed ROD refund rejected as non-final before lock height',
+    step(`pre-signed ${ASSET} refund rejected as non-final before lock height`,
       !probe.ok && /non-final/.test(probe.error || ''), probe.error || 'UNEXPECTEDLY ACCEPTED');
 
-    // timeline ordering: PREPARED strictly before SELLER_ROD_FUNDED
+    // timeline ordering: PREPARED strictly before ASSET_FUNDED
     const timeline = await alice.evaluate((id) => (rodOtc.engine.restoreLive(id).timeline || []).map((t) => t.state), swapId);
     const preparedIdx = timeline.indexOf('PREPARED');
-    const fundedIdx = timeline.indexOf('SELLER_ROD_FUNDED');
-    step('timeline: PREPARED precedes ROD funding broadcast', preparedIdx !== -1 && fundedIdx !== -1 && preparedIdx < fundedIdx,
+    const fundedIdx = timeline.indexOf('ASSET_FUNDED');
+    step(`timeline: PREPARED precedes ${ASSET} funding broadcast`, preparedIdx !== -1 && fundedIdx !== -1 && preparedIdx < fundedIdx,
       timeline.join(' → '));
 
-    await waitFor(() => altChain.broadcasts.length > 0 || null, 120000, `${ALT} funding broadcast`);
-    const altFundingB = altChain.broadcasts[0];
-    step(`${ALT} funding tx broadcast & independently validated (${ALT_AMOUNT} ${ALT})`, altFundingB.valid, altFundingB.details.join(' | '));
-    step(`${ALT} funding txid equals PLANNED txid`, altFundingB.txid === bobRefund.plannedTxid);
+    await waitFor(() => paymentChain.broadcasts.length > 0 || null, 120000, `${ALT} funding broadcast`);
+    const paymentFundingB = paymentChain.broadcasts[0];
+    step(`${ALT} funding tx broadcast & independently validated (${ALT_AMOUNT} ${ALT})`, paymentFundingB.valid, paymentFundingB.details.join(' | '));
+    step(`${ALT} funding txid equals PLANNED txid`, paymentFundingB.txid === bobRefund.plannedTxid);
 
     if (ALT_PROFILE.confirmations > 1) {
       await new Promise((resolve) => setTimeout(resolve, 3500));
       step(`${ALT} confirmation gate prevents claim at 1/${ALT_PROFILE.confirmations}`,
-        altChain.broadcasts.length === 1, `alt broadcasts: ${altChain.broadcasts.length}`);
-      altChain.height += ALT_PROFILE.confirmations - 1;
+        paymentChain.broadcasts.length === 1, `alt broadcasts: ${paymentChain.broadcasts.length}`);
+      paymentChain.height += ALT_PROFILE.confirmations - 1;
     }
 
     if (process.env.RELOAD_TEST === '1') {
-      /* Navigation intentionally cancels in-flight requests. Only the local
-         ROD /info health probe is expected; every other failure remains a
-         release blocker. */
+      /* Navigation intentionally cancels in-flight requests. An in-flight
+         request to one of this scenario's local chain APIs may be aborted;
+         failures outside that short reload window remain release blockers. */
       runtime.reloadAbortUntil.alice = Date.now() + 5000;
       await alice.reload({ waitUntil: 'load' });
       await alice.waitForFunction(() => window.rodOtc && window.rodOtc.engine && window.jQuery);
@@ -743,21 +782,21 @@ async function main() {
       await waitFor(() => alice.evaluate(() => (rodOtc.engine.pool && rodOtc.engine.pool.count() >= 1) || null), 15000, 'alice relay reconnect after reload');
       const persisted = await alice.evaluate((id) => {
         const s = rodOtc.engine.restoreLive(id);
-        return !!(s && s.remoteAltAdaptorSignature && s.rodRefund && s.rodRefund.signedHex && s.adaptorSecret);
+        return !!(s && s.remotePaymentAdaptorSignature && s.assetRefund && s.assetRefund.signedHex && s.adaptorSecret);
       }, swapId);
       step('after reload: adaptor sig, refund and secret persisted', persisted);
       if (runtime.expectedReloadAborts.length) {
-        step('deliberate reload aborts only the transient local health probe', true,
+        step('deliberate reload aborts only transient local chain API requests', true,
           runtime.expectedReloadAborts.length + ' expected request abort(s)');
       }
     }
 
     // release the claim height gate
-    rodChain.height = RELEASE_HEIGHT + 1;
+    controlRodChain.height = RELEASE_HEIGHT + 1;
 
-    await waitFor(() => altChain.broadcasts.length > 1 || null, 120000, `${ALT} claim broadcast`);
-    const altClaimB = altChain.broadcasts[1];
-    step(`${ALT} claim tx (2-of-2 P2SH, completed adaptor sig) broadcast & independently validated`, altClaimB.valid, altClaimB.details.join(' | '));
+    await waitFor(() => paymentChain.broadcasts.length > 1 || null, 120000, `${ALT} claim broadcast`);
+    const paymentClaimB = paymentChain.broadcasts[1];
+    step(`${ALT} claim tx (2-of-2 P2SH, completed adaptor sig) broadcast & independently validated`, paymentClaimB.valid, paymentClaimB.details.join(' | '));
 
     // Bob recovers the secret FROM THE REAL SIGNATURE
     await waitFor(() => bob.evaluate((id) => {
@@ -773,9 +812,9 @@ async function main() {
     }, swapId);
     step('recovered secret verifies against adaptor point (yG == Y)', recovery.matchesPoint, 'state ' + recovery.state);
 
-    await waitFor(() => rodChain.broadcasts.length > 1 || null, 90000, 'ROD claim broadcast');
-    const rodClaimB = rodChain.broadcasts[1];
-    step('ROD claim tx (2-of-2 P2SH, completed adaptor sig) broadcast & independently validated', rodClaimB.valid, rodClaimB.details.join(' | '));
+    await waitFor(() => rodChain.broadcasts.length > 1 || null, 90000, `${ASSET} claim broadcast`);
+    const assetClaimB = rodChain.broadcasts[1];
+    step(`${ASSET} claim tx (2-of-2 P2SH, completed adaptor sig) broadcast & independently validated`, assetClaimB.valid, assetClaimB.details.join(' | '));
 
     const bobState = await waitFor(() => bob.evaluate((id) => {
       const s = rodOtc.engine.restoreLive(id);
@@ -792,20 +831,20 @@ async function main() {
     const dests = await alice.evaluate((id) => {
       const s = rodOtc.engine.restoreLive(id);
       return {
-        sellerAltPayout: s.terms.sellerAltPayoutAddress,
-        buyerRodPayout: s.terms.buyerRodPayoutAddress,
-        altMultisig: s.terms.altFunding.multisigAddress,
-        rodMultisig: s.terms.rodFunding.multisigAddress
+        sellerAltPayout: s.terms.sellerPaymentPayoutAddress,
+        buyerRodPayout: s.terms.buyerAssetPayoutAddress,
+        altMultisig: s.terms.paymentFunding.multisigAddress,
+        rodMultisig: s.terms.assetFunding.multisigAddress
       };
     }, swapId);
-    const aliceGotAlt = altChain.balance(dests.sellerAltPayout);
+    const aliceGotAlt = paymentChain.balance(dests.sellerAltPayout);
     const bobGotRod = rodChain.balance(dests.buyerRodPayout);
     step(`alice received ${ALT} at her payout address`, aliceGotAlt === ALT_AMOUNT_SATS - ALT_CLAIM_FEE,
       `${aliceGotAlt} sats at ${dests.sellerAltPayout}`);
-    step('bob received ROD at his payout address', bobGotRod === Math.round(100 * 1e8) - ROD_CLAIM_FEE,
+    step(`bob received ${ASSET} at his payout address`, bobGotRod === Math.round(parseFloat(ROD_AMOUNT) * 1e8) - ROD_CLAIM_FEE,
       `${bobGotRod} sats at ${dests.buyerRodPayout}`);
-    step(`${ALT} multisig fully swept`, altChain.balance(dests.altMultisig) === 0);
-    step('ROD multisig fully swept', rodChain.balance(dests.rodMultisig) === 0);
+    step(`${ALT} multisig fully swept`, paymentChain.balance(dests.altMultisig) === 0);
+    step(`${ASSET} multisig fully swept`, rodChain.balance(dests.rodMultisig) === 0);
 
     // atomicity proof: NO normal-signature messages were ever needed
     const relayTypes = relay.events.map((e) => { try { return JSON.parse(e.content).type; } catch (err) { return ''; } });
@@ -814,55 +853,55 @@ async function main() {
       'message types seen: ' + [...new Set(relayTypes)].join(', '));
 
     const invalidRod = rodChain.broadcasts.filter((b) => !b.valid);
-    const invalidAlt = altChain.broadcasts.filter((b) => !b.valid);
-    step('zero invalid broadcast attempts (ROD)', invalidRod.length === 0, invalidRod.map((b) => b.details.join()).join('; '));
+    const invalidAlt = paymentChain.broadcasts.filter((b) => !b.valid);
+    step(`zero invalid broadcast attempts (${ASSET})`, invalidRod.length === 0, invalidRod.map((b) => b.details.join()).join('; '));
     step(`zero invalid broadcast attempts (${ALT})`, invalidAlt.length === 0, invalidAlt.map((b) => b.details.join()).join('; '));
   }
 
   /* ================= refund path ================= */
   async function runRefundPath() {
-    await waitFor(() => rodChain.broadcasts.length > 0 || null, 60000, 'ROD funding broadcast');
-    const rodFundingB = rodChain.broadcasts[0];
-    step('ROD funding tx broadcast & independently validated', rodFundingB.valid, rodFundingB.details.join(' | '));
+    await waitFor(() => rodChain.broadcasts.length > 0 || null, 60000, `${ASSET} funding broadcast`);
+    const assetFundingB = rodChain.broadcasts[0];
+    step(`${ASSET} funding tx broadcast & independently validated`, assetFundingB.valid, assetFundingB.details.join(' | '));
 
     // Bob requires 3 confirmations; height is frozen at 1 conf → he must NOT fund LTC
     await new Promise((r) => setTimeout(r, 8000)); // several automation ticks
-    step(`confirmation gate held: Bob did NOT fund ${ALT} at 1/3 confirmations`, altChain.broadcasts.length === 0,
-      `alt broadcasts: ${altChain.broadcasts.length}`);
+    step(`confirmation gate held: Bob did NOT fund ${ALT} at 1/3 confirmations`, paymentChain.broadcasts.length === 0,
+      `alt broadcasts: ${paymentChain.broadcasts.length}`);
 
     // refund is non-final before lock height
     const probe = rodChain.validateAndAccept(aliceRefund.signedHex);
-    step('pre-signed ROD refund rejected as non-final before lock height',
+    step(`pre-signed ${ASSET} refund rejected as non-final before lock height`,
       !probe.ok && /non-final/.test(probe.error || ''), probe.error || 'UNEXPECTEDLY ACCEPTED');
 
     // Bob disappears
     await bob.context().close();
-    step('bob disappeared (context closed) after ROD funding', true);
+    step(`bob disappeared (context closed) after ${ASSET} funding`, true);
 
     // chain advances past the refund height
     rodChain.height = START_HEIGHT + REFUND_ROD_BLOCKS + 5;
 
-    await waitFor(() => rodChain.broadcasts.length > 1 || null, 90000, 'ROD refund broadcast by automation');
+    await waitFor(() => rodChain.broadcasts.length > 1 || null, 90000, `${ASSET} refund broadcast by automation`);
     const refundB = rodChain.broadcasts[1];
-    step('pre-signed ROD refund broadcast & independently validated (locktime + 2-of-2 sigs)', refundB.valid, refundB.details.join(' | '));
+    step(`pre-signed ${ASSET} refund broadcast & independently validated (locktime + 2-of-2 sigs)`, refundB.valid, refundB.details.join(' | '));
 
     const aliceState = await waitFor(() => alice.evaluate((id) => {
       const s = rodOtc.engine.restoreLive(id);
-      return (s && (s.state === 'REFUNDED' || s.state === 'ROD_REFUNDED')) ? s.state : null;
+      return (s && (s.state === 'REFUNDED' || s.state === 'ASSET_REFUNDED')) ? s.state : null;
     }, swapId), 60000, 'alice refund state');
-    step('alice session reached refund state', aliceState === 'REFUNDED' || aliceState === 'ROD_REFUNDED', aliceState);
+    step('alice session reached refund state', aliceState === 'REFUNDED' || aliceState === 'ASSET_REFUNDED', aliceState);
 
-    const refundDest = await alice.evaluate((id) => rodOtc.engine.restoreLive(id).terms.sellerRodRefundAddress, swapId);
+    const refundDest = await alice.evaluate((id) => rodOtc.engine.restoreLive(id).terms.sellerAssetRefundAddress, swapId);
     const refunded = rodChain.balance(refundDest);
     step('funds returned to Alice refund address (amount minus refund fee)',
-      refunded === Math.round(100 * 1e8) - ROD_REFUND_FEE, `${refunded} sats at ${refundDest}`);
+      refunded === Math.round(parseFloat(ROD_AMOUNT) * 1e8) - ASSET_REFUND_FEE, `${refunded} sats at ${refundDest}`);
 
-    const rodMultisig = await alice.evaluate((id) => rodOtc.engine.restoreLive(id).terms.rodFunding.multisigAddress, swapId);
-    step('ROD multisig fully swept by refund', rodChain.balance(rodMultisig) === 0);
+    const rodMultisig = await alice.evaluate((id) => rodOtc.engine.restoreLive(id).terms.assetFunding.multisigAddress, swapId);
+    step(`${ASSET} multisig fully swept by refund`, rodChain.balance(rodMultisig) === 0);
 
     const invalidRod = rodChain.broadcasts.filter((b) => !b.valid);
-    step('zero invalid broadcast attempts (ROD)', invalidRod.length === 0, invalidRod.map((b) => b.details.join()).join('; '));
-    step(`zero ${ALT} broadcasts at all (Bob never funded)`, altChain.broadcasts.length === 0);
+    step(`zero invalid broadcast attempts (${ASSET})`, invalidRod.length === 0, invalidRod.map((b) => b.details.join()).join('; '));
+    step(`zero ${ALT} broadcasts at all (Bob never funded)`, paymentChain.broadcasts.length === 0);
   }
 
   /* ================= alt-leg refund path =================
@@ -874,18 +913,18 @@ async function main() {
      on Dogecoin that means legacy sighash, low-S DER, nLockTime finality with
      sequence 0xfffffffe, the absolute dust limits and the koinu/byte fee
      floor, none of which the Litecoin path proves. */
-  async function runAltRefundPath() {
-    await waitFor(() => rodChain.broadcasts.length > 0 || null, 60000, 'ROD funding broadcast');
-    step('ROD funding tx broadcast & independently validated', rodChain.broadcasts[0].valid,
+  async function runPaymentRefundPath() {
+    await waitFor(() => rodChain.broadcasts.length > 0 || null, 60000, `${ASSET} funding broadcast`);
+    step(`${ASSET} funding tx broadcast & independently validated`, rodChain.broadcasts[0].valid,
       rodChain.broadcasts[0].details.join(' | '));
 
-    await waitFor(() => altChain.broadcasts.length > 0 || null, 120000, `${ALT} funding broadcast`);
-    const altFundingB = altChain.broadcasts[0];
-    step(`${ALT} funding tx broadcast & independently validated`, altFundingB.valid, altFundingB.details.join(' | '));
-    step(`${ALT} funding txid equals PLANNED txid`, altFundingB.txid === bobRefund.plannedTxid);
+    await waitFor(() => paymentChain.broadcasts.length > 0 || null, 120000, `${ALT} funding broadcast`);
+    const paymentFundingB = paymentChain.broadcasts[0];
+    step(`${ALT} funding tx broadcast & independently validated`, paymentFundingB.valid, paymentFundingB.details.join(' | '));
+    step(`${ALT} funding txid equals PLANNED txid`, paymentFundingB.txid === bobRefund.plannedTxid);
 
     /* The pre-signed alt refund must be worthless until its lock height. */
-    const probe = altChain.validateAndAccept(bobRefund.signedHex);
+    const probe = paymentChain.validateAndAccept(bobRefund.signedHex);
     step(`pre-signed ${ALT} refund rejected as non-final before lock height`,
       !probe.ok && /non-final/.test(probe.error || ''), probe.error || 'UNEXPECTEDLY ACCEPTED');
 
@@ -893,12 +932,12 @@ async function main() {
     await alice.context().close();
     step('alice disappeared (context closed) without claiming', true);
 
-    altChain.height = START_HEIGHT + ALT_REFUND_BLOCKS + 5;
+    paymentChain.height = START_HEIGHT + PAYMENT_REFUND_BLOCKS + 5;
 
-    await waitFor(() => altChain.broadcasts.length > 1 || null, 120000, `${ALT} refund broadcast by automation`);
-    const altRefundB = altChain.broadcasts[1];
+    await waitFor(() => paymentChain.broadcasts.length > 1 || null, 120000, `${ALT} refund broadcast by automation`);
+    const paymentRefundB = paymentChain.broadcasts[1];
     step(`pre-signed ${ALT} refund broadcast & independently validated (locktime + 2-of-2 sigs + ${ALT} policy)`,
-      altRefundB.valid, altRefundB.details.join(' | '));
+      paymentRefundB.valid, paymentRefundB.details.join(' | '));
 
     const bobState = await waitFor(() => bob.evaluate((id) => {
       const s = rodOtc.engine.restoreLive(id);
@@ -908,20 +947,20 @@ async function main() {
 
     const bobDests = await bob.evaluate((id) => {
       const t = rodOtc.engine.restoreLive(id).terms;
-      return { refundAddr: t.buyerAltRefundAddress, multisig: t.altFunding.multisigAddress, refundFee: t.altRefundFee };
+      return { refundAddr: t.buyerPaymentRefundAddress, multisig: t.paymentFunding.multisigAddress, refundFee: t.paymentRefundFee };
     }, swapId);
-    const refunded = altChain.balance(bobDests.refundAddr);
+    const refunded = paymentChain.balance(bobDests.refundAddr);
     const expected = ALT_AMOUNT_SATS - Math.round(parseFloat(bobDests.refundFee) * 1e8);
     step(`${ALT} returned to Bob's refund address (amount minus refund fee)`, refunded === expected,
       `${refunded} vs expected ${expected} at ${bobDests.refundAddr}`);
-    step(`${ALT} multisig fully swept by refund`, altChain.balance(bobDests.multisig) === 0);
+    step(`${ALT} multisig fully swept by refund`, paymentChain.balance(bobDests.multisig) === 0);
 
-    const invalidAlt = altChain.broadcasts.filter((b) => !b.valid);
+    const invalidAlt = paymentChain.broadcasts.filter((b) => !b.valid);
     step(`zero invalid broadcast attempts (${ALT})`, invalidAlt.length === 0,
       invalidAlt.map((b) => b.details.join()).join('; '));
     step('alice never claimed: no secret was ever revealed on the alt chain',
-      altChain.broadcasts.filter((b) => b.valid).length === 2,
-      `${altChain.broadcasts.length} alt broadcasts (funding + refund only)`);
+      paymentChain.broadcasts.filter((b) => b.valid).length === 2,
+      `${paymentChain.broadcasts.length} alt broadcasts (funding + refund only)`);
   }
 }
 
@@ -934,8 +973,8 @@ main().catch(async (e) => {
     steps: results.steps,
     browserIssues: runtime.browserIssues,
     expectedReloadAborts: runtime.expectedReloadAborts,
-    rodBroadcasts: runtime.rodChain ? runtime.rodChain.broadcasts : [],
-    altBroadcasts: runtime.altChain ? runtime.altChain.broadcasts : [],
+    assetBroadcasts: runtime.rodChain ? runtime.rodChain.broadcasts : [],
+    paymentBroadcasts: runtime.paymentChain ? runtime.paymentChain.broadcasts : [],
     relayDiagnostics: relayDiagnostics(runtime.swapId),
     relayEventTypes: runtime.relay && runtime.relay.events
       ? runtime.relay.events.map((event) => {
@@ -956,7 +995,7 @@ main().catch(async (e) => {
     }
   }
   fs.writeFileSync(
-    path.join(__dirname, `e2e-report-${ALT.toLowerCase()}-${SCENARIO}${REPORT_REPEAT_SUFFIX}.json`),
+    path.join(__dirname, `e2e-report-${ASSET.toLowerCase()}-${ALT.toLowerCase()}-${SCENARIO}${REPORT_REPEAT_SUFFIX}.json`),
     JSON.stringify(report, null, 2)
   );
   try { if (runtime.browser) await runtime.browser.close(); } catch (closeError) {}
