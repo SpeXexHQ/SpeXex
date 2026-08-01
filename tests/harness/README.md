@@ -6,6 +6,16 @@ and a local NIP-01 relay. Production application files are not replaced by test
 doubles. The full runner discovers every ordered pair of distinct certified
 chains from the production registry.
 
+## Folder contents
+
+- [`package.json`](package.json) — pinned Playwright and verifier dependencies plus `test`, `test:fast`, and `test:full` scripts
+- [`run-all.sh`](run-all.sh) — sequential top-level runner for the full matrix
+- [`unit-browser-test.js`](unit-browser-test.js) — fast browser/registry invariants gate reused by release validation
+- [`e2e-swap-test.js`](e2e-swap-test.js) — one end-to-end settlement or refund scenario between two peers
+- [`mock-infra.js`](mock-infra.js) — local mock chain APIs, relay helpers, and scenario infrastructure
+- [`e2e-report.json`](e2e-report.json) — sample/latest harness summary artifact checked into the folder
+- generated `e2e-report-<asset>-<payment>-<scenario>.json` files — scenario-level diagnostics emitted by [`run-all.sh`](run-all.sh:1) or direct single-scenario runs
+
 Every broadcast is parsed and independently checked with `bitcoinjs-lib` and
 `@noble/curves`: prevouts, signatures, sighash type, 2-of-2 CHECKMULTISIG
 ordering, value conservation, dust, relay/mining fee, `nLockTime`, and
@@ -36,6 +46,8 @@ npx playwright install --with-deps chromium
 bash run-all.sh
 ```
 
+Run those commands from [`tests/harness/`](./). This folder is the only part of the repository with its own [`package.json`](package.json); the main wallet stays build-free and static.
+
 Useful controls:
 
 - `FAST_ONLY=1 bash run-all.sh` — Node-only contracts and mutations.
@@ -60,3 +72,9 @@ Useful controls:
 `run-all.sh` is deliberately sequential. The mock servers use fixed ports and
 the swap automation is timing-sensitive; parallel cases would create harness
 contention rather than useful product load.
+
+## Expected artifacts and usage notes
+
+- Use [`node e2e-swap-test.js`](e2e-swap-test.js:1) with environment variables for focused investigation, but do not treat a single scenario as a release substitute for [`bash run-all.sh`](run-all.sh:1).
+- Treat checked-in JSON reports as evidence artifacts, not as the authoritative source of current certification status; the current certification source of truth is the shipped registry plus the latest rerun of the harness.
+- If this folder changes, refresh [`SHA256SUMS`](../../SHA256SUMS) with [`node tests/update-checksums.js`](../update-checksums.js:1) from the repository root and rerun [`bash tests/run-fast.sh`](../run-fast.sh:1).

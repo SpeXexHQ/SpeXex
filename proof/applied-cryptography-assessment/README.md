@@ -8,6 +8,24 @@ cb136d791c836c704a122278d00c7bfefde1a8b0
 
 It specifies and independently implements the repository's private ECDSA adaptor-signature variant. It then generates vectors, cross-checks them against the wallet, and records a conditional cryptographic proof and audit.
 
+## Folder contents
+
+| Path | Purpose |
+|---|---|
+| [`README.md`](README.md) | entrypoint for the assessment bundle |
+| [`SPECIFICATION.md`](SPECIFICATION.md) | byte-level normative specification of the private variant |
+| [`SECURITY-PROOF.md`](SECURITY-PROOF.md) | assumptions, lemmas, theorem scope, and negative results |
+| [`AUDIT.md`](AUDIT.md) | audit verdict and remediation guidance |
+| [`EXECUTION-REPORT.md`](EXECUTION-REPORT.md) / [`EXECUTION-REPORT.json`](EXECUTION-REPORT.json) | human-readable and machine-readable run outputs |
+| [`rod-web-swap-applied-cryptography-assessment.md`](rod-web-swap-applied-cryptography-assessment.md) | long-form assessment write-up |
+| [`rod-web-swap-cryptographic-correctness-addendum.md`](rod-web-swap-cryptographic-correctness-addendum.md) | follow-up correctness notes |
+| [`rod-web-swap-otc-crypto-verdict.md`](rod-web-swap-otc-crypto-verdict.md) | short verdict summary |
+| [`src/private-adaptor-reference.mjs`](src/private-adaptor-reference.mjs) | clean-room implementation using `@noble/curves` |
+| [`test/`](test/) | vector generation, verification, and wallet cross-check scripts |
+| [`vectors/private-adaptor-v1.json`](vectors/private-adaptor-v1.json) | deterministic positive and negative vectors |
+| [`MANIFEST.sha256`](MANIFEST.sha256) | bundle-local integrity manifest |
+| [`package.json`](package.json) and [`package-lock.json`](package-lock.json) | pinned Node dependency metadata for the assessment scripts |
+
 ## Result
 
 The experiment establishes all of the following for **strictly validated, canonical secp256k1 inputs**:
@@ -64,6 +82,8 @@ for offset in 0 2 4 6 8 10 12 14; do
 done
 ```
 
+Run those commands from [`proof/applied-cryptography-assessment/`](./). This bundle has its own isolated Node metadata and does not change the repository-wide no-build rule for the main wallet.
+
 ## Executed coverage
 
 - 1,789 clean-room assertions
@@ -105,3 +125,9 @@ This is implementation independence, not institutional independence or accredita
 ## Important interpretation
 
 Passing the vectors proves conformance to the specification. The algebraic lemmas prove correctness on the specified domain. Neither activity alone proves security against every protocol adversary. The security document identifies exactly which claims follow from which assumptions and which desired properties are false.
+
+## Relationship to the rest of the repository
+
+- This folder is a documentation-and-evidence bundle, not part of the wallet runtime loaded by [`index.html`](../../index.html).
+- Its local [`MANIFEST.sha256`](MANIFEST.sha256) complements, but does not replace, the repository-wide [`SHA256SUMS`](../../SHA256SUMS).
+- If files in this bundle change, also refresh the repository inventory with [`node tests/update-checksums.js`](../../tests/update-checksums.js:1) and rerun [`bash tests/run-fast.sh`](../../tests/run-fast.sh:1).

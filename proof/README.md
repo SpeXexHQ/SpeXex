@@ -1,6 +1,6 @@
 # Proof artifacts
 
-This directory contains the generated evidence package for the OTC swap harness. The main entry point is [`proof/proofreport.html`](proof/proofreport.html), and the screenshots capture the wallet UI state that the harness produced while those scenarios were running.
+This directory contains checked-in visual and report artifacts related to wallet and OTC verification work. The main entry point is [`proof/proofreport.html`](proof/proofreport.html), while the images capture wallet UI states observed during proof generation.
 
 ## What is in this directory
 
@@ -11,6 +11,11 @@ This directory contains the generated evidence package for the OTC swap harness.
 - [`proof/doge-wallet.jpg`](proof/doge-wallet.jpg) — screenshot of the Dogecoin wallet used in the proof set.
 - [`proof/active-swap-detail.jpg`](proof/active-swap-detail.jpg) — active-swap detail screenshot for a completed ROD ↔ LTC session.
 - [`proof/active-swap-detail1.jpg`](proof/active-swap-detail1.jpg) — active-swap detail screenshot for a completed ROD ↔ DOGE session.
+- [`proof/applied-cryptography-assessment/`](applied-cryptography-assessment/) — separate clean-room adaptor-signature assessment bundle with its own documentation and manifests.
+
+## Role of this folder
+
+This folder is an evidence archive, not executable runtime code and not the authoritative source of current release certification. Current release validation still comes from rerunning [`bash tests/run-fast.sh`](../tests/run-fast.sh:1) and, before release, [`bash tests/harness/run-all.sh`](../tests/harness/run-all.sh:1).
 
 ## What the proof report proves
 
@@ -23,7 +28,7 @@ At the current snapshot, the matrix records:
 - `52` validated broadcasts in [`proof/proofreport.html`](proof/proofreport.html:63)
 - `4` counter chains in [`proof/proofreport.html`](proof/proofreport.html:64)
 
-The report covers happy-path, ROD-refund, and alt-refund outcomes across LTC, DOGE, BTC, and BCH sections throughout [`proof/proofreport.html`](proof/proofreport.html:68).
+Those numbers describe this checked-in artifact only. They should be read as historical evidence for one proof run, not as a promise that the current shipping registry still certifies the same chain set.
 
 ## How it works
 
@@ -138,3 +143,12 @@ What this image shows operationally:
 The screenshots are UI evidence, while [`proof/proofreport.html`](proof/proofreport.html) is the structured verification artifact. The screenshots show what a participant saw in the wallet. The HTML report records the machine-checked outcome, including tx validation and relay message sequencing.
 
 If a reader wants the strongest evidence, start with [`proof/proofreport.html`](proof/proofreport.html), then use the screenshots as visual confirmation of the wallet state that the harness exercised.
+
+## Refresh workflow
+
+When proof artifacts are intentionally regenerated:
+
+1. rerun the relevant harness flows from [`tests/`](../tests/) and [`tests/harness/`](../tests/harness/),
+2. replace or add the resulting artifacts in this folder,
+3. refresh [`SHA256SUMS`](../SHA256SUMS) with [`node tests/update-checksums.js`](../tests/update-checksums.js:1), and
+4. rerun [`bash tests/run-fast.sh`](../tests/run-fast.sh:1).

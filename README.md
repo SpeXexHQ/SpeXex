@@ -1,261 +1,223 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 <!-- Copyright (c) SpaceXpanse contributors -->
 
-# rod-web-swap
+# SpeXex
 
-Static browser-based SpaceXpanse ROD wallet with an integrated experimental OTC swap engine.
+Static browser-based SpaceXpanse ROD wallet, PWA shell, and experimental OTC swap client.
 
 ## Experimental disclaimer
 
 > [!WARNING]
-> **Do not treat this project as production-ready.**
-> 
-> The author is **not** a cryptographer, and this work has **not** been externally reviewed. That means there is very likely a fatal flaw somewhere.
-> 
-> This repository is still **highly experimental**, should be treated as a **proof of concept**, and should be used **only for testing**.
-> 
-> It has achieved the ability to perform **fully non-custodial swaps between two Bitcoin-derived blockchains** in its current proof-of-concept form, but it should **not** be used to swap serious amounts.
-> 
-> Proof artifacts and screenshots live under [`proof/`](proof).
+> **Do not treat SpeXex as production-ready.**
+>> The author is **not** a cryptographer, and this work has **not** been externally reviewed. That means it can contain a fatal flaw somewhere.
+> The wallet and OTC runtime remain experimental. This repository should be used for testing, research, and protocol iteration rather than real trading of meaningful value.
+>
+> The swap flow demonstrates fully non-custodial execution across Bitcoin-derived chains, but the overall system is still a proof of concept with important cryptographic, networking, and operational caveats.
+>
+> Historical screenshots and proof artifacts live under [`proof/`](proof).
 
-## Overview
+## What SpeXex is
 
-[`rod-web-swap`](README.md) is a static, browser-based, non-custodial SpaceXpanse ROD wallet and multi-chain swap hub. Protocol v2 uses one settlement-coin registry: any registered coin can occupy the asset or payment role, and both chain identities are bound into the canonical terms. ROD remains the control plane for trader identity, reputation, order ownership, and authoritative order discovery even when ROD is not one of the two settlement legs. Key generation and signing remain inside the browser; Nostr carries signed negotiation messages and browser-native adaptor signatures drive settlement.
+[`SpeXex`](README.md) is the current project identity for this repository. It is a static browser wallet centered on SpaceXpanse ROD, extended with an integrated OTC swap runtime that can coordinate trust-minimized swaps between certified Bitcoin-derived chains.
 
-The OTC subsystem is implemented directly in the main wallet shell through [`js/otc-app-ui.js`](js/otc-app-ui.js), [`js/otc-engine.js`](js/otc-engine.js), [`js/otc-nostr.js`](js/otc-nostr.js), and [`js/otc-swap.js`](js/otc-swap.js). The current runtime includes planned funding txids, pre-signed timelocked refunds, `PREPARED` settlement gating, automated refund monitoring, and persistent in-browser swap recovery, as tracked in [`CHANGELOG.md`](CHANGELOG.md).
+The codebase is intentionally build-free at the repository root:
 
-## What is implemented
+- the main application is loaded directly from [`index.html`](index.html);
+- wallet, OTC, and explorer logic live in plain browser JavaScript under [`js/`](js/);
+- the PWA shell is defined by [`manifest.webmanifest`](manifest.webmanifest) and [`sw.js`](sw.js);
+- verification is performed by deterministic Node-based gates in [`tests/`](tests/) and the real-browser settlement harness in [`tests/harness/`](tests/harness/).
 
-### Wallet
+## Core capabilities
 
-- Local key generation and transaction signing in the browser through [`js/coin.js`](js/coin.js) and [`js/coinbin.js`](js/coinbin.js)
-- ROD wallet send/receive flows in [`index.html`](index.html) and [`js/coinbin.js`](js/coinbin.js)
-- Offline transaction decode, verify, rebuild, and sign flows
-- ROD API-backed balance, UTXO, transaction lookup, and broadcast handling through [`coinjs.addressBalance()`](js/coin.js:419), [`coinjs.transaction().listUnspent()`](js/coin.js:1197), [`coinjs.transaction().getTransaction()`](js/coin.js:1239), and [`coinjs.transaction().broadcast()`](js/coin.js:1322)
-- Deterministic local fee guidance rather than remote fee estimation, centered on [`ensureWalletFeeMeetsRelayFloor()`](js/coinbin.js:463)
-- PWA shell support through [`manifest.webmanifest`](manifest.webmanifest) and [`sw.js`](sw.js)
+### Wallet runtime
 
-### OTC swap engine
+- local key generation, address derivation, signing, and transaction assembly in [`js/coin.js`](js/coin.js) and [`js/coinbin.js`](js/coinbin.js)
+- browser UI and wallet flows wired from [`index.html`](index.html)
+- send, receive, transaction decode, verify, rebuild, and sign tooling in the wallet shell
+- offline-first signing, with live chain access only for balance, UTXO, lookup, health, and broadcast operations
+- per-chain API configuration propagated through the registry-derived wallet runtime
+- deterministic fee-floor guidance centered on [`ensureWalletFeeMeetsRelayFloor()`](js/coinbin.js:463)
+- progressive web app support through [`manifest.webmanifest`](manifest.webmanifest) and [`sw.js`](sw.js)
 
-- Serverless browser OTC runtime integrated into [`index.html`](index.html)
-- On-chain order publication/discovery model using the ROD name/value database and optional local RPC/proxy support
-- Nostr-based peer signaling through [`js/otc-nostr.js`](js/otc-nostr.js)
-- Adaptor-signature-based claim flow using [`js/ecdsa-adaptor.js`](js/ecdsa-adaptor.js)
-- Planned funding txids before broadcast
-- One settlement registry for ROD, Litecoin, and Dogecoin; each can occupy either swap role
-- ROD-governed identity, reputation, order ownership, and name-database discovery
-- Pre-signed timelocked refunds on both chains
-- `REFUNDS_READY → SIGNATURES_EXCHANGED → PREPARED` gating before funding broadcast
-- Confirmation-gated settlement progression
-- Automated refund monitoring and refund terminal states
-- Reload-resilient in-browser swap persistence
-- End-to-end browser proof harness coverage in [`tests/README.md`](tests/README.md) and [`tests/harness/README.md`](tests/harness/README.md)
+### OTC swap runtime
 
-## Architecture at a glance
+- integrated OTC dashboard and workflow in [`js/otc-app-ui.js`](js/otc-app-ui.js)
+- session orchestration, persistence, and storage glue in [`js/otc-engine.js`](js/otc-engine.js)
+- deterministic protocol state construction and transitions in [`js/otc-swap.js`](js/otc-swap.js)
+- Nostr-based peer messaging in [`js/otc-nostr.js`](js/otc-nostr.js)
+- adaptor-signature settlement flow in [`js/ecdsa-adaptor.js`](js/ecdsa-adaptor.js)
+- pre-signed, timelocked refunds on both settlement legs
+- `REFUNDS_READY → SIGNATURES_EXCHANGED → PREPARED` funding gate before any funding broadcast
+- refund monitoring, recovery, and reload-resilient browser persistence
+- ROD name/value order publication and discovery, with optional local RPC helper support from [`tools/README.md`](tools/README.md)
 
-The project follows a three-layer model that matches the technical specification in [`docs/technical_specification_rod_web_swap.pdf`](docs/technical_specification_rod_web_swap.pdf):
+### Supported chain model
 
-- **Local browser sandbox / PWA client** — UI, state handling, wallet logic, and cryptographic execution run inside the browser
-- **ROD control plane** — authoritative orderbook, identity, reputation, ownership, and release-height coordination; it may also be selected as a settlement coin
-- **Nostr signaling layer** — used for ephemeral peer-to-peer negotiation and swap message exchange
+- one authoritative registry in [`js/chain-registry.js`](js/chain-registry.js)
+- certified settlement chains currently include ROD, Litecoin, and Dogecoin
+- wallet-only chains remain available for wallet functionality without being certified for settlement
+- a chain can serve as either `assetChain` or `paymentChain`; role is selected per swap, not by separate codepaths
 
-At repository level, the main entrypoints are:
+## Current architecture
 
-- [`index.html`](index.html) — single-page wallet and OTC shell
-- [`js/chain-registry.js`](js/chain-registry.js) — authoritative wallet, API, settlement-policy, timing, and certification profiles
-- [`js/coin.js`](js/coin.js) — registry-derived wallet networks, signing helpers, transaction logic, and API wrappers
-- [`js/coinbin.js`](js/coinbin.js) — wallet UI controller and transaction flows
-- [`js/otc-app-ui.js`](js/otc-app-ui.js) — OTC dashboard, swap UI, and operator flows
-- [`js/otc-engine.js`](js/otc-engine.js) — OTC orchestration, live session state, API access, and relay/runtime glue
-- [`js/otc-swap.js`](js/otc-swap.js) — deterministic swap/session construction and state transitions
-- [`js/otc-chains.js`](js/otc-chains.js) — registry-derived address, multisig, relay, fee, dust, and amount helpers
-- [`js/otc-explorer.js`](js/otc-explorer.js) — pluggable block-explorer adapter (Esplora / BlockCypher)
+SpeXex currently operates as three cooperating layers:
 
-A durable maintainer summary of the runtime architecture lives in [`docs/maintainer-wiki/concept-architecture-overview.md`](docs/maintainer-wiki/concept-architecture-overview.md).
+1. **Browser wallet and PWA shell** — the user-facing application loaded by [`index.html`](index.html)
+2. **ROD control plane** — identity, order ownership, name-based publication/discovery, reputation, and release-height coordination
+3. **Nostr signaling layer** — peer-to-peer swap negotiation and state message transport
 
-## Unified settlement chains
+Repository-level entrypoints reflect those layers:
 
-All chain facts live in the single authoritative registry in
-[`js/chain-registry.js`](js/chain-registry.js). A swap chooses distinct
-`terms.assetChain` and `terms.paymentChain` values; neither role implies a
-separate implementation or package. Both values are part of the hashed
-canonical terms, so a counterparty cannot announce one pair and obtain
-signatures for another. ROD, LTC, and DOGE are currently certified; the proof
-matrix exercises every ordered pair, including reversed roles and pairs where
-ROD is only the control plane rather than a settlement leg.
+- [`index.html`](index.html) — single-page application shell
+- [`js/chain-registry.js`](js/chain-registry.js) — authoritative chain, API, policy, and certification source
+- [`js/coin.js`](js/coin.js) — transaction helpers, signing, wallet network data, and API wrappers
+- [`js/coinbin.js`](js/coinbin.js) — wallet controller and page wiring
+- [`js/otc-app-ui.js`](js/otc-app-ui.js) — OTC interface, orderbook, session views, and operator actions
+- [`js/otc-engine.js`](js/otc-engine.js) — OTC runtime orchestration, storage, APIs, and recovery behavior
+- [`js/otc-chains.js`](js/otc-chains.js) — address, fee, dust, relay, and multisig helpers derived from the registry
+- [`js/otc-explorer.js`](js/otc-explorer.js) — explorer backend normalization into one common contract
+- [`js/otc-swap.js`](js/otc-swap.js) — canonical swap/session state machine logic
 
-The economic sequence is invariant: the asset seller funds first and holds the
-adaptor secret; the payment-side buyer funds second; claiming the payment leg
-reveals the secret needed to claim the asset leg. The payment refund therefore
-matures first and the asset refund later. ROD's control-plane release height is
-checked independently of those two settlement roles.
+Durable maintainer-facing architecture notes live in [`docs/maintainer-wiki/concept-architecture-overview.md`](docs/maintainer-wiki/concept-architecture-overview.md).
 
-Protocol-v1 sessions and orders were testing-only and are intentionally
-retired. Version 2 uses new Nostr kinds and `spexSwapV2*` storage keys; it does
-not read, migrate, display, import, or resume v1 state.
+## Important runtime constraints
 
-To add a chain, add one complete profile to `js/chain-registry.js`, keep it
-`wallet-only` while independently verifying its parameters, then change its
-status to `certified` only after its P2PKH/P2SH vectors and full happy/refund/
-reload matrix pass. The wallet network, API Settings row, Coins menu, both swap
-selectors, runtime defaults, mock policy, and scenario list are derived
-automatically. See [`docs/ADDING_A_CHAIN.md`](docs/ADDING_A_CHAIN.md).
+### No root build step
 
-| | Litecoin | Dogecoin |
+There is no root [`package.json`](package.json) and no repository-wide build pipeline for the main application. The shipped wallet is the checked-in static asset set rooted at [`index.html`](index.html).
+
+### Script load order matters
+
+Runtime behavior depends on script-tag ordering in [`index.html`](index.html). Crypto libraries must load before [`js/coin.js`](js/coin.js), and [`js/coin.js`](js/coin.js) must load before [`js/coinbin.js`](js/coinbin.js).
+
+### Registry is the source of truth
+
+All chain/network/API/policy defaults must derive from [`js/chain-registry.js`](js/chain-registry.js). Copied chain tables or duplicated swap-chain definitions are intentionally avoided.
+
+### Browser-only does not mean fully offline
+
+Key material stays local, but the runtime still depends on remote APIs for live chain state, broadcast, and OTC coordination. The wallet is offline-first, not chain-disconnected.
+
+## Settlement-chain behavior
+
+The current protocol version uses canonical `assetChain` and `paymentChain` terms, plus `spexSwapV2*` browser storage keys. Protocol-v1 state is intentionally retired and is not migrated or resumed.
+
+The swap economic sequence is fixed:
+
+1. the asset-side seller funds first;
+2. the payment-side buyer funds second;
+3. claiming the payment leg reveals the adaptor secret;
+4. the revealed secret enables the asset claim;
+5. the payment refund must therefore mature before the asset refund.
+
+### Certified non-ROD chain details
+
+| Property | Litecoin | Dogecoin |
 |---|---|---|
-| P2PKH / P2SH / WIF version | `0x30` / `0x32` / `0xb0` | `0x1e` / `0x16` / `0x9e` |
-| BIP32 extended keys | `Ltub` / `Ltpv` | `dgub` (`0x02facafd`) / `dgpv` (`0x02fac398`) |
-| SegWit / bech32 | available (unused by the swap escrow) | **does not exist** — permanently disabled in Dogecoin Core |
-| Escrow | 2-of-2 P2SH `OP_CHECKMULTISIG` | same |
-| Settlement fee | 0.00001 LTC | 0.01 DOGE (1000 koinu/B mining floor) |
-| Dust | 546 sat | **absolute**: 0.001 DOGE hard, 0.01 DOGE soft (+0.01 DOGE per soft-dust output) |
-| Refund windows (payment / asset role) | 24 / 96 blocks ≈ 1 h / 4 h | 60 / 240 blocks ≈ 1 h / 4 h |
-| Confirmations before settling | 1 (~2.5 min) | 6 (~6 min) |
-| Default backend | Esplora (`litecoinspace.org`) | BlockCypher |
+| P2PKH / P2SH / WIF | `0x30` / `0x32` / `0xb0` | `0x1e` / `0x16` / `0x9e` |
+| BIP32 extended keys | `Ltub` / `Ltpv` | `dgub` / `dgpv` |
+| SegWit | available, but not used by escrow | unavailable |
+| Escrow script form | 2-of-2 P2SH multisig | 2-of-2 P2SH multisig |
+| Settlement fee default | `0.00001 LTC` | `0.01 DOGE` |
+| Dust handling | standard satoshi-based floor | absolute Dogecoin hard/soft dust policy |
+| Refund windows | 24 / 96 blocks | 60 / 240 blocks |
+| Settlement confirmations | 1 | 6 |
+| Default explorer backend | Esplora | BlockCypher |
 
-Three details drove the Dogecoin work and are worth knowing before changing it:
+Dogecoin-specific constraints are especially important:
 
-Dogecoin has **no SegWit and no `OP_CHECKSEQUENCEVERIFY`**. CSV's activation
-window closed unsignalled in 2017 and remains inactive, so relative timelocks
-are mempool policy rather than consensus there. This protocol never needed
-CSV — its refunds are absolute `nLockTime` with input sequence `0xfffffffe`,
-which behaves exactly as on Bitcoin — but any future change that reaches for
-CSV would be unsafe on Dogecoin.
+- Dogecoin has no SegWit support in this runtime and no usable CSV-based consensus path for this protocol.
+- Dogecoin dust policy is absolute and enforced before signatures are accepted.
+- Public Dogecoin explorer access is rate-limited, so sustained use may require a self-hosted backend.
 
-Dogecoin dust is an **absolute amount**, not a fee-rate derivation. An output
-below 0.001 DOGE makes the whole transaction non-standard no matter how much
-fee is attached, and an output below 0.01 DOGE adds a flat 0.01 DOGE surcharge
-to the relay minimum. Both rules are encoded in
-[`js/otc-chains.js`](js/otc-chains.js) and enforced before any sighash is
-signed.
+## Folder map
 
-There is **no public Dogecoin Esplora instance**. The default backend is
-therefore BlockCypher, reached through the adapter in
-[`js/otc-explorer.js`](js/otc-explorer.js), which normalises every backend into
-the Esplora response shape the rest of the code already consumes. BlockCypher's
-keyless tier is rate limited per source IP. The adapter coalesces concurrent
-identical GETs into one request, which is a real saving when several sessions
-poll the same chain on the same tick — but it deliberately keeps no time-based
-cache, because serving a swap a value that was already stale can cost it the
-window in which it had to act. Sustained use on Dogecoin therefore wants a
-self-hosted `electrs-doge`: switch the backend to `esplora` in OTC Settings and
-point it at your own node.
+The repository currently breaks down as follows:
 
-## Trust and security model
-
-This repository aims for **non-custodial execution**, not production-grade safety.
-
-- Private keys are intended to remain in local browser execution paths
-- The wallet is offline-first for signing, but **not fully offline** for balance lookup, UTXO discovery, transaction lookup, broadcast, and OTC coordination
-- OTC coordination is separated from custody, but still depends on chain APIs, Nostr delivery, and optional local RPC/proxy flows for some name/orderbook operations
-- The OTC design is a proof of concept for fully non-custodial swaps across two Bitcoin-derived chains, not a finished protocol product
-
-The technical specification in [`docs/technical_specification_rod_web_swap.pdf`](docs/technical_specification_rod_web_swap.pdf) also highlights important caution areas:
-
-- browser-native adaptor-signature math is intentionally implemented without relying on a compiled `libsecp256k1-zkp` fork
-- legacy big-number code paths may expose timing-side-channel risk in browser environments
-- public coordination/indexing choices create privacy and linkability tradeoffs
-
-These are reasons to keep this project in the **experimental / testing-only** category.
+- [`js/`](js/) — browser runtime code for wallet, OTC, explorer adapters, crypto helpers, and chain registry data
+- [`css/`](css/) — static stylesheets used by the wallet shell
+- [`images/`](images/) — icons, branding, and PWA assets
+- [`fonts/`](fonts/) — bundled font assets
+- [`tests/`](tests/) — deterministic release and regression gates
+- [`tests/harness/`](tests/harness/) — real-browser Playwright settlement harness and reports
+- [`tools/`](tools/) — optional local helper for browser-safe ROD Core RPC access
+- [`proof/`](proof/) — historical screenshots and proof artifacts
+- [`docs/`](docs/) — specifications, maintainer wiki, and reference material
+- [`electron/`](electron/) — Electron packaging/runtime wrapper for the static wallet assets
 
 ## Quick start
 
-## Run the wallet
+### Open the wallet
 
-This repository has **no root [`package.json`](package.json)** and no build step for the main application.
+Use either of these approaches:
 
-To run the wallet:
+1. open [`index.html`](index.html) directly in a browser; or
+2. serve the repository as static files and open [`index.html`](index.html).
 
-1. Open [`index.html`](index.html) directly in a browser, or
-2. Serve the repository as static files and load [`index.html`](index.html)
+Default assumptions in the shipped wallet include:
 
-Default wallet runtime assumptions:
+- ROD API defaulting to `https://api.spacexpanse.org:1234`
+- donation output disabled by default
+- registry-derived API and chain defaults
+- legacy wallet access compatibility retained for existing users
 
-- ROD API endpoint defaults to `https://api.spacexpanse.org:1234`
-- Donation output is disabled by default
-- Script-tag ordering in [`index.html`](index.html) is a compatibility requirement
+### Use OTC mode
 
-## Use OTC mode
+1. Open the OTC section in [`index.html`](index.html).
+2. Review or adjust chain API settings for your environment.
+3. If you need local ROD Core RPC-backed name or order flows, use the optional helper described in [`tools/README.md`](tools/README.md).
 
-1. Open the OTC tab inside [`index.html`](index.html)
-2. Configure ROD/LTC API endpoints if your environment differs from the defaults
-3. If you want name operations or on-chain orderbook publication through local ROD Core RPC, run the helper described in [`tools/README.md`](tools/README.md)
+For Windows helper usage, the checked-in executable is [`tools/rod-rpc-cors-proxy.exe`](tools/rod-rpc-cors-proxy.exe).
 
-For the optional helper flow, use [`tools/rod-rpc-cors-proxy.exe`](tools/rod-rpc-cors-proxy.exe) as documented in [`tools/README.md`](tools/README.md).
+## Verification workflow
 
-## Verification and proofs
+### Fast required gate
 
-### Manual/browser verification
+After final source or documentation edits, refresh [`SHA256SUMS`](SHA256SUMS) with [`tests/update-checksums.js`](tests/update-checksums.js:1) and run the fast gate in [`tests/run-fast.sh`](tests/run-fast.sh:1).
 
-For ordinary wallet and shell changes, load [`index.html`](index.html) in a browser and exercise the affected flow.
+That gate covers:
 
-### OTC proof harness
+- release wiring and static asset inventory
+- script-order and PWA cache integrity
+- explorer contract normalization
+- OTC protocol adversarial cases
+- wallet race regressions
+- negative-control mutation checks
 
-The strongest current OTC verification path is the real-browser harness documented in:
+### Full browser certification gate
 
-- [`tests/README.md`](tests/README.md)
-- [`tests/harness/README.md`](tests/harness/README.md)
+Before release, use the sequential harness in [`tests/harness/`](tests/harness/) as documented in [`tests/harness/README.md`](tests/harness/README.md). It drives the real app in headless Chromium, reloads the PWA shell offline, and verifies every ordered pair of distinct certified chains.
 
-That harness runs the real app in two browser contexts against mock ROD/LTC backends and a local Nostr relay, and validates broadcast transactions independently.
+### Historical proof artifacts
 
-### Visual proof artifacts
+[`proof/README.md`](proof/README.md) describes the checked-in screenshots and proof reports. Those files are evidence snapshots, not the authoritative source of current release truth.
 
-Screenshots and proof artifacts are available under [`proof/`](proof), including:
+## Security and operational caveats
 
-- [`proof/active-swap-detail.jpg`](proof/active-swap-detail.jpg)
-- [`proof/ltc-wallet.jpg`](proof/ltc-wallet.jpg)
-- [`proof/rod-wallet.jpg`](proof/rod-wallet.jpg)
+- SpeXex is non-custodial in design, but not production-approved.
+- Browser-local signing does not remove dependency on external explorers, APIs, and relay delivery.
+- The adaptor-signature work remains experimental and has separate research material in [`proof/applied-cryptography-assessment/README.md`](proof/applied-cryptography-assessment/README.md).
+- PWA correctness depends on keeping [`sw.js`](sw.js) and [`_headers`](_headers) aligned with actual shipped assets and backend hosts.
+- Dogecoin settlement remains subject to its non-SegWit and explorer-availability constraints.
 
-## Current limitations and caveats
+## Documentation entrypoints
 
-- This work is a proof of concept and has **not** been cryptographically reviewed
-- Live OTC success still depends on reliable API and relay behavior
-- Some OTC orderbook/name operations depend on the optional local RPC/proxy path described in [`tools/README.md`](tools/README.md)
-- Script-tag ordering in [`index.html`](index.html) must remain intact
-- PWA shell integrity depends on keeping [`sw.js`](sw.js) aligned with actual cached assets
-- ROD API response handling is tailored to the current `{result,error}` envelope behavior
-- Dogecoin has no SegWit, so a funding transaction's txid is malleable at the consensus layer. In practice the standardness rules every relaying node applies (strict DER, low-S, minimal pushes, push-only scriptSigs) block all known third-party malleation, which is the same position Bitcoin was in before SegWit — but it is policy, not consensus. The same applies to the Litecoin leg, which also uses legacy P2SH escrow.
-- The public Dogecoin backends are rate limited. A long-running Dogecoin swap on the keyless BlockCypher tier may need a self-hosted `electrs-doge` or an API key
-- This project should be used for **testing**, not for real trading of meaningful value
+- [`tests/README.md`](tests/README.md) — deterministic release and regression gates
+- [`tests/harness/README.md`](tests/harness/README.md) — full settlement harness and scenario controls
+- [`tools/README.md`](tools/README.md) — optional ROD RPC helper
+- [`proof/README.md`](proof/README.md) — proof artifacts and screenshot archive
+- [`proof/applied-cryptography-assessment/README.md`](proof/applied-cryptography-assessment/README.md) — clean-room adaptor-signature analysis bundle
+- [`docs/maintainer-wiki/README.md`](docs/maintainer-wiki/README.md) — durable maintainer wiki overview
+- [`docs/maintainer-wiki/index.md`](docs/maintainer-wiki/index.md) — maintainer wiki catalog
+- [`CHANGELOG.md`](CHANGELOG.md) — release history and behavior changes
 
-## Repository structure
+## Attribution and licensing
 
-```text
-.
-├─ index.html
-├─ js/
-│  ├─ coin.js
-│  ├─ coinbin.js
-│  ├─ otc-app-ui.js
-│  ├─ otc-chains.js
-│  ├─ otc-engine.js
-│  ├─ otc-explorer.js
-│  ├─ otc-nostr.js
-│  └─ otc-swap.js
-├─ tests/
-├─ tools/
-├─ docs/
-├─ proof/
-├─ sw.js
-└─ manifest.webmanifest
-```
+SpeXex descends from the browser-wallet lineage associated with Coinb.in, but the current repository behavior is defined by the SpaceXpanse ROD wallet runtime, the OTC modules, the registry-driven chain model, and the repository documentation linked above.
 
-## Further reading
+Licensing in this repository is mixed:
 
-- Release history and verified behavior: [`CHANGELOG.md`](CHANGELOG.md)
-- Durable maintainer architecture notes: [`docs/maintainer-wiki/concept-architecture-overview.md`](docs/maintainer-wiki/concept-architecture-overview.md)
-- Carbon Memory index: [`docs/maintainer-wiki/index.md`](docs/maintainer-wiki/index.md)
-- Technical specification: [`docs/technical_specification_rod_web_swap.pdf`](docs/technical_specification_rod_web_swap.pdf)
-- OTC proof harness: [`tests/README.md`](tests/README.md) and [`tests/harness/README.md`](tests/harness/README.md)
-- Optional RPC helper: [`tools/README.md`](tools/README.md)
-
-## Attribution
-
-This project is derived from the browser-wallet lineage represented by [`coinbin`](README.md), but the current repository behavior should be understood through the SpaceXpanse ROD runtime, OTC modules, and repository-specific documentation linked above.
-
-## Licensing
-
-- Original Coinb.in-derived material in this repository remains under the MIT license in [`LICENSE`](LICENSE).
-- SpaceXpanse/ROD fork-specific additions are licensed under Apache License 2.0 in [`LICENSE-APACHE`](LICENSE-APACHE), unless a file states otherwise.
-- Repository distributions should preserve both [`LICENSE`](LICENSE) and [`LICENSE-APACHE`](LICENSE-APACHE) so the mixed licensing scope remains clear.
-- File-level SPDX headers and notices control more specific cases where present.
+- original Coinb.in-derived material remains under [`LICENSE`](LICENSE)
+- SpaceXpanse-specific additions are licensed under [`LICENSE-APACHE`](LICENSE-APACHE), unless a file states otherwise
+- distributions should preserve both license files
+- file-level SPDX headers remain authoritative where present
