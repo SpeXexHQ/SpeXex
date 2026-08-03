@@ -99,7 +99,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p release-assets
-          app_version="$(node -p \"require('./package.json').version\")"
+          app_version="$(node -p 'require("./package.json").version')"
 
           case "${{ runner.os }}" in
             Windows)
