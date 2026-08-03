@@ -95,11 +95,72 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: ${{ matrix.package_command }}
 
+      - name: Archive portable desktop app
+        shell: bash
+        run: |
+          mkdir -p release-assets
+
+          case "${{ runner.os }}" in
+            Windows)
+              if [ ! -d dist/win-unpacked ]; then
+                echo "Expected unpacked Windows app directory dist/win-unpacked was not produced." >&2
+                exit 1
+              fi
+
+              if ! find dist/win-unpacked -maxdepth 1 -type f -name '*.exe' | grep -q .; then
+                echo "Expected at least one runnable .exe inside dist/win-unpacked before archiving." >&2
+                exit 1
+              fi
+
+              archive_name="SpeXex-${{ github.event.workflow_run.head_sha }}-windows-x64.zip"
+              archive_path="release-assets/$archive_name"
+              powershell -NoLogo -NoProfile -Command "Compress-Archive -Path 'dist/win-unpacked/*' -DestinationPath '$archive_path' -Force"
+              ;;
+            Linux)
+              if [ ! -d dist/linux-unpacked ]; then
+                echo "Expected unpacked Linux app directory dist/linux-unpacked was not produced." >&2
+                exit 1
+              fi
+
+              if ! find dist/linux-unpacked -maxdepth 1 -type f \( -perm -111 -o -name 'SpeXex' -o -name '*.AppImage' \) | grep -q .; then
+                echo "Expected a runnable Linux entrypoint inside dist/linux-unpacked before archiving." >&2
+                exit 1
+              fi
+
+              archive_name="SpeXex-${{ github.event.workflow_run.head_sha }}-linux-x64.tar.gz"
+              archive_path="release-assets/$archive_name"
+              tar -C dist -czf "$archive_path" linux-unpacked
+              ;;
+            macOS)
+              if [ ! -d dist/mac ]; then
+                echo "Expected unpacked macOS app directory dist/mac was not produced." >&2
+                exit 1
+              fi
+
+              if ! find dist/mac -maxdepth 1 -type d -name '*.app' | grep -q .; then
+                echo "Expected at least one runnable .app bundle inside dist/mac before archiving." >&2
+                exit 1
+              fi
+
+              archive_name="SpeXex-${{ github.event.workflow_run.head_sha }}-macos-${{ runner.arch }}.zip"
+              archive_path="release-assets/$archive_name"
+              ditto -c -k --sequesterRsrc --keepParent dist/mac "$archive_path"
+              ;;
+            *)
+              echo "Unsupported runner OS: ${{ runner.os }}" >&2
+              exit 1
+              ;;
+          esac
+
+          printf '%s\n' "$archive_path"
+
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: electron/dist/**
+          path: |
+            electron/release-assets/*.zip
+            electron/release-assets/*.tar.gz
           if-no-files-found: error
           retention-days: 7
 
@@ -148,32 +209,43 @@ jobs:
       - name: Collect release asset files
         shell: bash
         run: |
+          mkdir -p release-bundle
+
           find \
             release-artifacts/release-electron-windows \
             release-artifacts/release-electron-linux \
             release-artifacts/release-electron-macos \
             -maxdepth 1 -type f \
             \( \
-              -name '*.exe' -o \
-              -name '*.AppImage' -o \
-              -name '*.deb' -o \
-              -name '*.dmg' -o \
-              -name '*.zip' \
+              -name '*.zip' -o \
+              -name '*.tar.gz' \
             \) \
             | sort > release-assets.txt
-          printf '%s\n' "SHA256SUMS" >> release-assets.txt
 
-          if [ "$(wc -l < release-assets.txt)" -le 1 ]; then
-            echo "No desktop package files were found for release upload." >&2
+          if [ ! -s release-assets.txt ]; then
+            echo "No archive-only desktop release files were found for release upload." >&2
             exit 1
           fi
 
-          cat release-assets.txt
+          while IFS= read -r asset_path; do
+            cp "$asset_path" release-bundle/
+          done < release-assets.txt
+
+          (
+            cd release-bundle
+            sha256sum *.zip *.tar.gz > SHA256SUMS
+          )
+
+          find release-bundle -maxdepth 1 -type f \
+            \( -name '*.zip' -o -name '*.tar.gz' -o -name 'SHA256SUMS' \) \
+            | sort > release-upload-files.txt
+
+          cat release-upload-files.txt
 
       - name: Create or update GitHub release
         shell: bash
         run: |
-          mapfile -t asset_files < release-assets.txt
+          mapfile -t asset_files < release-upload-files.txt
 
           if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release create "$RELEASE_TAG" \
