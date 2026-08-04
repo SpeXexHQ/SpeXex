@@ -1,7 +1,7 @@
 {
-  "name": "SpeXex 2.6.1-beta.0",
+  "name": "SpeXex 2.7.0-beta.0",
   "short_name": "SpeXex",
-  "description": "SpeXex is a SpaceXpanse ROD wallet and multi-chain swap hub 2.6.1-beta.0 with ROD-governed order discovery and non-custodial settlement.",
+  "description": "SpeXex is a SpaceXpanse ROD wallet and multi-chain swap hub 2.7.0-beta.0 with ROD-governed order discovery and non-custodial settlement.",
   "id": "./",
   "start_url": "./",
   "scope": "./",

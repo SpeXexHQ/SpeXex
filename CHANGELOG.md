@@ -10,6 +10,12 @@ The format is inspired by Keep a Changelog and follows Semantic Versioning princ
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+## [2.7.0-beta.0] - 2026-08-04
+
+### Added
 - **Canonical public chain-information pages.** A new **Chain Info** navigation entry immediately after **Coins** exposes a deep-linkable `#chain/<CODE>` page for every registry profile. Each page is rendered directly from `js/chain-registry.js` and shows the chain description, address/HD parameters, SegWit and Bech32 capabilities, API and explorer endpoints, official website/documentation/repositories, wallet or swap-certification status, fee/dust policy, and every verified bidirectional OTC route. No second chain table or `chain-info.js` data file was added.
 - **Route-ownership marks in the Coins and Chain Info menus.** Certified chains use a green check when their configured route endpoint is hosted by SpeXex and a blue check when it is community-run on external infrastructure. The active website coin is identified only by a distinct menu background; the former chevron indicator is removed.
 
@@ -17,7 +23,8 @@ The format is inspired by Keep a Changelog and follows Semantic Versioning princ
 - **SpeXex homepage/navbar/PWA branding refresh.** The homepage, navbar, title/meta text, web manifest, and service-worker cache identity now present SpeXex branding consistently. [`images/spexex_logo.png`](images/spexex_logo.png) is the active homepage/navbar wordmark, while the existing PWA icons were intentionally kept because they already match the SpeXex rocket style.
 - **One canonical market is shown for each unordered certified pair.** Reverse protocol orientations such as `DOGE/ROD` and `ROD/DOGE` now share one canonical orderbook/filter market, while each offer retains its original directional `assetChain` / `paymentChain`, side, amounts, signatures, and refund policy for settlement.
 - **The active website coin now controls new-swap asset selection.** The OTC New swap asset is read-only and follows the same site-wide coin switch used by the Coins menu and Chain Info pages. Its payment choices exclude the active asset, and wallet-only active coins disable swap creation instead of silently selecting another settlement chain.
-- **Release identity bumped to `2.6.1-beta.0`.** The next patch beta now marks the shipped UI, manifest, service-worker cache identity, and Electron wrapper consistently for release packaging.
+- **Release identity bumped to `2.7.0-beta.0`.** The next minor beta now marks the shipped UI, manifest, service-worker cache identity, desktop wrapper, and release checks consistently for packaging.
+- **Desktop release packaging remains archive-only.** The release workflow continues publishing unpackable archives built from the Electron directory outputs (`dist/win-unpacked`, `dist/linux-unpacked`, and `dist/mac` or fallback `dist/mac-*` artifacts) instead of installer-first release assets.
 
 ## [2.6.1-beta.0] - 2026-08-01
 

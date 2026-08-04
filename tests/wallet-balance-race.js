@@ -130,7 +130,7 @@ function testDgbRoutingAndCsp() {
 		'wallet API settings must migrate the old shipped DGB default');
 	assert(!/rodOtcEngineConfig|altChains|rodApiUrl/.test(engineSource),
 		'v2 OTC engine must not read or migrate the old configuration schema');
-	assert(/STATIC_CACHE_VERSION\s*=\s*"[^"]*2\.6\.1-beta\.0/.test(serviceWorker),
+	assert(/STATIC_CACHE_VERSION\s*=\s*"[^"]*2\.7\.0-beta\.0/.test(serviceWorker),
 		'service-worker cache must carry the current release identity');
 }
 

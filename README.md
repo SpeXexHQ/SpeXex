@@ -175,6 +175,8 @@ For Windows helper usage, the checked-in executable is [`tools/rod-rpc-cors-prox
 
 After final source or documentation edits, refresh [`SHA256SUMS`](SHA256SUMS) with [`tests/update-checksums.js`](tests/update-checksums.js:1) and run the fast gate in [`tests/run-fast.sh`](tests/run-fast.sh:1).
 
+Desktop release publication is archive-only: the Electron workflow packages runtime directories from [`electron/dist/`](electron/dist/) into Windows `win-unpacked`, Linux `linux-unpacked`, and macOS `dist/mac` or fallback `dist/mac-*` archive assets rather than treating installer artifacts as the release payload.
+
 That gate covers:
 
 - release wiring and static asset inventory
