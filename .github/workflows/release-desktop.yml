@@ -132,19 +132,22 @@ jobs:
               tar -C dist -czf "$archive_path" linux-unpacked
               ;;
             macOS)
-              if [ ! -d dist/mac ]; then
-                echo "Expected unpacked macOS app directory dist/mac was not produced." >&2
-                exit 1
-              fi
+              mac_app_dir=""
+              for candidate in dist/mac dist/mac-*; do
+                if [ -d "$candidate" ] && find "$candidate" -maxdepth 1 -type d -name '*.app' | grep -q .; then
+                  mac_app_dir="$candidate"
+                  break
+                fi
+              done
 
-              if ! find dist/mac -maxdepth 1 -type d -name '*.app' | grep -q .; then
-                echo "Expected at least one runnable .app bundle inside dist/mac before archiving." >&2
+              if [ -z "$mac_app_dir" ]; then
+                echo "Expected unpacked macOS app directory dist/mac or dist/mac-* was not produced." >&2
                 exit 1
               fi
 
               archive_name="SpeXex-${{ github.event.workflow_run.head_sha }}-macos-${{ runner.arch }}.zip"
               archive_path="release-assets/$archive_name"
-              ditto -c -k --sequesterRsrc --keepParent dist/mac "$archive_path"
+              ditto -c -k --sequesterRsrc --keepParent "$mac_app_dir" "$archive_path"
               ;;
             *)
               echo "Unsupported runner OS: ${{ runner.os }}" >&2

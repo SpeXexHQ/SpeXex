@@ -21,7 +21,7 @@
     "package:dir": "npm run sync-wallet && electron-builder --dir --publish never",
     "package:win": "npm run sync-wallet && electron-builder --win nsis dir --publish never",
     "package:linux": "npm run sync-wallet && electron-builder --linux AppImage deb --publish never",
-    "package:mac": "npm run sync-wallet && electron-builder --mac dmg zip --publish never",
+    "package:mac": "npm run sync-wallet && electron-builder --mac dir zip dmg --publish never",
     "package:all": "npm run sync-wallet && electron-builder -mwl --publish never"
   },
   "overrides": {
@@ -96,6 +96,13 @@
     "mac": {
       "category": "public.app-category.finance",
       "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
         {
           "target": "dmg",
           "arch": [
