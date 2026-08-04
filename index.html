@@ -2,11 +2,11 @@
 <html lang="en">
 	<head>
 
-		<title>SpaceXpanse ROD Wallet by rod-web-wallet</title>
+		<title>SpeXex Wallet</title>
 
 		<meta http-equiv="content-type" content="text/html;charset=utf-8" />
-		<meta name="keywords" content="spacexpanse, rod, wallet, multisig, multisignature, address, browser, segwit, javascript, js, broadcast, transaction, verify, decode" />
-		<meta name="description" content="A SpaceXpanse ROD Wallet written in Javascript. Supports Multisig, SegWit, custom transactions, nLockTime and more!" />
+		<meta name="keywords" content="spexex, spacexpanse, rod, wallet, atomic swap, otc swap, multisig, multisignature, address, browser, segwit, javascript, js, broadcast, transaction, verify, decode" />
+		<meta name="description" content="SpeXex is a browser-based SpaceXpanse ROD wallet and multi-chain OTC swap hub. Create addresses, sign locally, and coordinate trustless swaps without custody." />
 
 		<meta http-equiv="X-UA-Compatible" content="IE=edge">
 		<meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,7 +14,7 @@
 		<meta name="mobile-web-app-capable" content="yes">
 		<meta name="apple-mobile-web-app-capable" content="yes">
 		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-		<meta name="apple-mobile-web-app-title" content="ROD Wallet">
+		<meta name="apple-mobile-web-app-title" content="SpeXex">
 
 		<link rel="manifest" href="manifest.webmanifest">
 		<link rel="icon" type="image/png" sizes="32x32" href="images/icon-32.png">
@@ -82,8 +82,8 @@
 							<span class="icon-bar"></span>
 						</button>
 						<a href="#home" class="navbar-brand rod-brand" id="homeBtn">
-							<img src="images/coinbin.png" alt="SpaceXpanse ROD coin logo">
-							<span>SpaceXpanse <b>ROD</b></span>
+							<img src="images/spexex_logo.png" alt="SpeXex logo">
+							<span>SpeXex</span>
 						</a>
 					</div>
 					<div class="collapse navbar-collapse">
@@ -142,22 +142,22 @@
 					<div class="tab-pane tab-content active" id="home">
 						<div class="row">
 							<div class="col-md-12">
-								<h2>SpaceXpanse ROD Wallet <small>Welcome to the Blockchain</small></h2>
+								<h2>SpeXex <small>Non-custodial wallet and OTC swap hub</small></h2>
 							</div>
 						</div>
 
 						<div class="jumbotron rod-hero">
 							<div class="rod-hero-copy">
-								<p class="rod-eyebrow">Browser-based mission control for SpaceXpanse</p>
-								<h1>Secure your ROD journey.</h1>
-								<p>Create addresses, open your wallet, build transactions, and sign locally while your private keys stay in your browser.</p>
+								<p class="rod-eyebrow">Browser mission control for SpeXex</p>
+								<h1>Wallet control. Swap freedom.</h1>
+								<p>SpeXex keeps wallet keys local while you create addresses, build transactions, sign in-browser, and coordinate trustless multi-chain OTC swaps.</p>
 								<p>
 									<a class="btn btn-primary btn-lg" href="#wallet" data-toggle="tab" role="button">Open Wallet</a>
-									<a class="btn btn-default btn-lg" href="#newAddress" data-toggle="tab" role="button">Create Address</a>
+									<a class="btn btn-default btn-lg" href="#otc" data-toggle="tab" role="button">Open OTC Swap</a>
 								</p>
 							</div>
 						<div class="rod-hero-orb" aria-hidden="true">
-							<img src="images/about.png" alt="">
+							<img src="images/icon-512.png" alt="">
 						</div>
 						</div>
 
@@ -167,14 +167,14 @@
 							<div class="col-md-4">
 								<div class="rod-feature-card">
 									<h3><span class="glyphicon glyphicon-lock"></span> Keys Stay Local</h3>
-									<p>Generate addresses and sign ROD transactions in-browser without sending private keys to a remote server.</p>
+									<p>Generate addresses and sign transactions in-browser without sending private keys, passphrases, or WIF keys to a remote server.</p>
 								</div>
 							</div>
 
 							<div class="col-md-4">
 								<div class="rod-feature-card">
-									<h3><span class="glyphicon glyphicon-screenshot"></span> ROD Native</h3>
-									<p>Use SpaceXpanse network constants, ROD explorer links, ROD URI handling, SegWit, and Bech32 support.</p>
+									<h3><span class="glyphicon glyphicon-screenshot"></span> SpeXex Native</h3>
+									<p>Use registry-driven chain constants, explorer links, ROD control-plane discovery, local fee guidance, and wallet tools from one static app.</p>
 								</div>
 							</div>
 
@@ -214,8 +214,8 @@
 						<div class="row rod-feature-grid">
 							<div class="col-md-12">
 								<div class="rod-feature-card" style="text-align:center">
-									<h3><span class="glyphicon glyphicon-transfer"></span> OTC Atomic Swap</h3>
-									<p style="max-width:700px;margin:0 auto">Trade <b>ROD</b> for <b>LTC</b>, <b>DOGE</b>, and other supported chains directly from your browser using trustless atomic swaps. No intermediary, no custodian — ECDSA adaptor signatures ensure both parties settle or both refund. Orders are published on-chain via the ROD name database and coordinated over Nostr relays.</p>
+									<h3><span class="glyphicon glyphicon-transfer"></span> SpeXex OTC Atomic Swap</h3>
+									<p style="max-width:700px;margin:0 auto">Trade <b>ROD</b>, <b>LTC</b>, <b>DOGE</b>, and other supported chains directly from your browser using trustless atomic swaps. No intermediary, no custodian — ECDSA adaptor signatures ensure both parties settle or both refund. Orders are published on-chain via the ROD name database and coordinated over Nostr relays.</p>
 									<p style="margin-top:12px">
 										<a class="btn btn-primary" href="#otc" data-toggle="tab" role="button"><span class="glyphicon glyphicon-transfer"></span> Open OTC Swap</a>
 									</p>
@@ -1564,13 +1564,13 @@
 					</div>
 
 					<div class="tab-pane tab-content" id="about">
-						<h2>About</h2>
-						<p>GitHub <a href="https://github.com/SpaceXpanse/rod-web-wallet">https://github.com/SpaceXpanse/rod-web-wallet</a></p>
+						<h2>About SpeXex</h2>
+						<p>GitHub <a href="https://github.com/SpaceXpanse/SpeXex">https://github.com/SpaceXpanse/SpeXex</a></p>
 					</div>
 
 					<div class="tab-pane tab-content" id="settings">
-					 <h2>Settings <small> making rod-web-wallet even better!</small></h2>
-					 <p>These simple settings below make rod-web-wallet one of the most decentralized wallets in the world.</p>
+					 <h2>Settings <small>make SpeXex fit your environment</small></h2>
+					 <p>These settings configure local wallet generation and per-chain API endpoints for SpeXex.</p>
 
 					 <div class="row">
 					 <div class="col-md-12">
@@ -1618,7 +1618,7 @@
 
 							<br>
 
-							<div class="alert alert-info"> <span class="glyphicon glyphicon-info-sign"></span> You will not be able to automatically broadcast or retreive your unspent outputs from rod-web-wallet when using this setting and will need to use your desktop client instead, however everything else such as creating key pairs, addresses, transaction generation and signing will continue to function normally.</div>
+							<div class="alert alert-info"> <span class="glyphicon glyphicon-info-sign"></span> SpeXex cannot automatically broadcast or retrieve your unspent outputs when using custom network constants, so you will need to use your desktop client for live chain operations. Creating key pairs, addresses, transactions, and signatures will continue to function locally.</div>
 						</div>
 
 						<hr>
@@ -1645,7 +1645,7 @@
 					</div>
 
 					<br>
-					<p class="text-muted">This page uses JavaScript to generate your addresses and sign your transactions within your browser, which means we <i>never</i> receive your private keys. This can be independently verified by reviewing the source code on <a href="https://github.com/SpaceXpanse/rod-web-wallet" target="_blank">GitHub</a>. You can even <a href="https://github.com/SpaceXpanse/rod-web-wallet/archive/refs/heads/main.zip">download</a> this page and host it yourself or run it offline.</p>
+					<p class="text-muted">SpeXex uses JavaScript to generate addresses and sign transactions within your browser, which means the app <i>never</i> receives your private keys. This can be independently verified by reviewing the source code on <a href="https://github.com/SpaceXpanse/SpeXex" target="_blank">GitHub</a>. You can even <a href="https://github.com/SpaceXpanse/SpeXex/archive/refs/heads/main.zip">download</a> this page and host it yourself or run it offline.</p>
 					<br>
 
 				</div>

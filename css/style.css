@@ -157,9 +157,10 @@ body {
 
 .rod-brand img {
 	height: 34px;
-	width: 34px;
-	border-radius: 50%;
-	box-shadow: 0 0 24px rgba(9, 199, 247, 0.45);
+	width: auto;
+	max-width: 116px;
+	border-radius: 0;
+	box-shadow: none;
 }
 
 #content {
