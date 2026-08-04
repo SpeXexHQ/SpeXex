@@ -99,6 +99,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p release-assets
+          app_version="$(node -p 'require("./package.json").version')"
 
           case "${{ runner.os }}" in
             Windows)
@@ -112,7 +113,7 @@ jobs:
                 exit 1
               fi
 
-              archive_name="SpeXex-${{ github.event.workflow_run.head_sha }}-windows-x64.zip"
+              archive_name="SpeXex-${app_version}-win-x64.zip"
               archive_path="release-assets/$archive_name"
               powershell -NoLogo -NoProfile -Command "Compress-Archive -Path 'dist/win-unpacked/*' -DestinationPath '$archive_path' -Force"
               ;;
@@ -127,27 +128,35 @@ jobs:
                 exit 1
               fi
 
-              archive_name="SpeXex-${{ github.event.workflow_run.head_sha }}-linux-x64.tar.gz"
+              archive_name="SpeXex-${app_version}-linux-x64.tar.gz"
               archive_path="release-assets/$archive_name"
               tar -C dist -czf "$archive_path" linux-unpacked
               ;;
             macOS)
-              mac_app_dir=""
-              for candidate in dist/mac dist/mac-*; do
-                if [ -d "$candidate" ] && find "$candidate" -maxdepth 1 -type d -name '*.app' | grep -q .; then
-                  mac_app_dir="$candidate"
-                  break
-                fi
-              done
-
-              if [ -z "$mac_app_dir" ]; then
-                echo "Expected unpacked macOS app directory dist/mac or dist/mac-* was not produced." >&2
-                exit 1
-              fi
-
-              archive_name="SpeXex-${{ github.event.workflow_run.head_sha }}-macos-${{ runner.arch }}.zip"
+              archive_name="SpeXex-${app_version}-macos-${{ runner.arch }}.zip"
               archive_path="release-assets/$archive_name"
-              ditto -c -k --sequesterRsrc --keepParent "$mac_app_dir" "$archive_path"
+
+              if [ -d dist/mac ] && find dist/mac -maxdepth 1 -type d -name '*.app' | grep -q .; then
+                ditto -c -k --sequesterRsrc --keepParent dist/mac "$archive_path"
+              else
+                mac_zip_path="$(find dist -maxdepth 1 -type f -name 'SpeXex-*-mac-*.zip' | head -n 1)"
+
+                if [ -z "$mac_zip_path" ]; then
+                  echo "Expected either dist/mac with a .app bundle or an electron-builder macOS zip artifact in dist/." >&2
+                  exit 1
+                fi
+
+                temp_extract_dir="$(mktemp -d)"
+                unzip -q "$mac_zip_path" -d "$temp_extract_dir"
+
+                if ! find "$temp_extract_dir" -maxdepth 2 -type d -name '*.app' | grep -q .; then
+                  echo "Expected a runnable .app bundle inside the macOS zip artifact before repackaging." >&2
+                  exit 1
+                fi
+
+                ditto -c -k --sequesterRsrc --keepParent "$temp_extract_dir" "$archive_path"
+                rm -rf "$temp_extract_dir"
+              fi
               ;;
             *)
               echo "Unsupported runner OS: ${{ runner.os }}" >&2
