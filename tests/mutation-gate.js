@@ -27,12 +27,12 @@ function replaceOnce(file, before, after) {
 	fs.writeFileSync(file, source.replace(before, after));
 }
 
-function runTest(script, appDir) {
-	const extraEnv = script === 'release-gate.js'
+function runTest(script, appDir, extraEnv) {
+	const releaseEnv = script === 'release-gate.js'
 		? { SKIP_RELEASE_INTEGRITY: '1' }
 		: {};
 	return spawnSync(process.execPath, [path.join(testRoot, script)], {
-		env: Object.assign({}, process.env, { APP_DIR: appDir }, extraEnv),
+		env: Object.assign({}, process.env, { APP_DIR: appDir }, releaseEnv, extraEnv || {}),
 		encoding: 'utf8',
 		timeout: 60000
 	});
@@ -42,6 +42,7 @@ const mutants = [
 	{
 		name: 'unsigned swap events become optional',
 		script: 'security-regression.js',
+		env: { SECURITY_REGRESSION_FILTER: 'Nostr signatures' },
 		mutate(appDir) {
 			replaceOnce(
 				path.join(appDir, 'js', 'otc-nostr.js'),
@@ -53,6 +54,7 @@ const mutants = [
 	{
 		name: 'unsigned order events become optional',
 		script: 'security-regression.js',
+		env: { SECURITY_REGRESSION_FILTER: 'Nostr order-event authentication' },
 		mutate(appDir) {
 			replaceOnce(
 				path.join(appDir, 'js', 'otc-nostr.js'),
@@ -64,6 +66,7 @@ const mutants = [
 	{
 		name: 'terms hash equality is bypassed',
 		script: 'security-regression.js',
+		env: { SECURITY_REGRESSION_FILTER: 'terms hash hard failure' },
 		mutate(appDir) {
 			replaceOnce(
 				path.join(appDir, 'js', 'otc-swap.js'),
@@ -75,6 +78,7 @@ const mutants = [
 	{
 		name: 'refund ordering guard is disabled',
 		script: 'security-regression.js',
+		env: { SECURITY_REGRESSION_FILTER: 'refund ordering for LTC and DOGE' },
 		mutate(appDir) {
 			replaceOnce(
 				path.join(appDir, 'js', 'otc-swap.js'),
@@ -119,7 +123,7 @@ for (const mutant of mutants) {
 	const appDir = copyProject();
 	try {
 		mutant.mutate(appDir);
-		const result = runTest(mutant.script, appDir);
+		const result = runTest(mutant.script, appDir, mutant.env);
 		const wasKilled = result.status !== 0;
 		if (!wasKilled) {
 			console.error('FAIL mutation survived: ' + mutant.name);

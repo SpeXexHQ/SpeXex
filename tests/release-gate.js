@@ -277,6 +277,7 @@ check('wallet, explorer, and OTC support registries cannot drift', () => {
 	const engineSource = read('js/otc-engine.js');
 	const uiSource = read('js/otc-app-ui.js');
 	const walletUiSource = read('js/coinbin.js');
+	const indexSource = read('index.html');
 	const e2eSource = read('tests/harness/e2e-swap-test.js');
 	const mockSource = read('tests/harness/mock-infra.js');
 	const runnerSource = read('tests/harness/run-all.sh');
@@ -311,6 +312,33 @@ check('wallet, explorer, and OTC support registries cannot drift', () => {
 		'OTC UI exposes every wallet network as a swap network');
 	assert(walletUiSource.includes('function renderWalletCoinMenu()') && walletUiSource.includes('for(var code in coinjs.networks)'),
 		'wallet Coins menu must be generated from the authoritative registry');
+	for (const code of chainRegistry.codes()) {
+		const profile = chainRegistry.getProfile(code);
+		assert(typeof profile.description === 'string' && profile.description.length >= 40, code + ' public description is missing');
+		assert(/^https:\/\//.test(profile.website) && /^https:\/\//.test(profile.documentation),
+			code + ' public website/documentation URLs are missing');
+		assert(Array.isArray(profile.repositories) && profile.repositories.length > 0, code + ' repository inventory is missing');
+		assert(profile.api.operator === 'spexex' || profile.api.operator === 'community', code + ' API operator classification is missing');
+		const expectedRoutes = profile.swap.status === 'certified' ? definitions.length - 1 : 0;
+		assert(chainRegistry.verifiedRoutes(code).length === expectedRoutes, code + ' verified route inventory drifted');
+	}
+	assert(indexSource.indexOf('id="chainInfoNavItem"') > indexSource.indexOf('id="coinsMenu"') &&
+		indexSource.indexOf('id="chainInfoNavItem"') < indexSource.indexOf('glyphicon-briefcase'),
+		'Chain Info navigation must sit directly after Coins');
+	assert(indexSource.includes('id="chainInfoContent"') && walletUiSource.includes('function renderChainInfo(code)') &&
+		walletUiSource.includes('registry.verifiedRoutes(normalized)'),
+		'canonical chain pages must render directly from the authoritative registry');
+	assert(walletUiSource.includes('coin-route-hosted') && walletUiSource.includes('coin-route-community') &&
+		walletUiSource.includes('glyphicon glyphicon-briefcase coin-wallet-only') &&
+		walletUiSource.includes('glyphicon glyphicon-briefcase chain-info-wallet-only') &&
+		walletUiSource.includes('active-coin') && !walletUiSource.includes('glyphicon-chevron-right coin-active'),
+		'wallet and Chain Info menus must distinguish hosted/community routes, show wallet-only briefcases, and use background-only active selection');
+	assert(walletUiSource.includes("setActiveCoin($(this).attr('data-chain'))") && walletUiSource.includes("trigger('spexActiveCoinChanged'"),
+		'Chain Info selection must use the same website-wide active-coin path as the Coins menu');
+	assert(uiSource.includes('otc-asset-locked') && uiSource.includes('syncNewSwapAsset(activeSiteCoin())') &&
+		uiSource.includes("$('#nsMyAddr').val(visibleIdentity)") && uiSource.includes('checkWallet();') &&
+		uiSource.includes('canonicalMarketKey(codes[i], codes[j])') && uiSource.includes('function marketView(offer)'),
+		'OTC UI must lock asset and visible identity to the active coin and normalize reverse directions into canonical markets');
 	assert(walletUiSource.includes('Object.keys(coinjs.networks || {}).sort()'),
 		'wallet Settings network dropdown must be generated from the authoritative registry');
 	assert(!walletUiSource.includes('Currently supported chains for OTC trading: ROD, LTC, DOGE'),

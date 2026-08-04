@@ -89,11 +89,13 @@ async function main() {
 			}
 			const menuCoins = Array.from(document.querySelectorAll('.walletCoinSelect'))
 				.map((node) => node.getAttribute('data-coin')).sort();
-			const assetOptions = Array.from(document.querySelectorAll('#nsAssetChain option'))
-				.map((node) => node.value).filter(Boolean).sort();
+			const assetNode = document.querySelector('#nsAssetChain');
+			const assetControl = assetNode ? { tag: assetNode.tagName, readOnly: assetNode.readOnly, value: assetNode.value } : null;
 			const paymentOptions = Array.from(document.querySelectorAll('#nsPaymentChain option'))
 				.map((node) => node.value).filter(Boolean).sort();
-			return { walletNetworks, otcChains, registryNetworks, registrySwapChains, explorerSupport, menuCoins, assetOptions, paymentOptions };
+			const marketOptions = Array.from(document.querySelectorAll('#otcBookChainFilter option'))
+				.map((node) => node.value).filter(Boolean);
+			return { walletNetworks, otcChains, registryNetworks, registrySwapChains, explorerSupport, menuCoins, assetControl, paymentOptions, marketOptions };
 		});
 		step(
 			'wallet menu and registered wallet networks agree',
@@ -102,17 +104,157 @@ async function main() {
 			'networks=' + scope.walletNetworks.join(',') + ' menu=' + scope.menuCoins.join(',')
 		);
 		step(
-			'one settlement registry drives both role selectors and excludes wallet-only BTC/BCH/DGB',
+			'active website coin is the locked OTC asset and canonical markets are unique',
 			JSON.stringify(scope.otcChains) === JSON.stringify(scope.registrySwapChains) &&
-				JSON.stringify(scope.assetOptions) === JSON.stringify(scope.otcChains) &&
-				JSON.stringify(scope.paymentOptions) === JSON.stringify(scope.otcChains),
-			'definitions=' + scope.otcChains.join(',') + ' asset=' + scope.assetOptions.join(',') +
-				' payment=' + scope.paymentOptions.join(',')
+				scope.assetControl && scope.assetControl.tag === 'INPUT' && scope.assetControl.readOnly === true && scope.assetControl.value === 'ROD' &&
+				JSON.stringify(scope.paymentOptions) === JSON.stringify(scope.otcChains.filter((code) => code !== 'ROD').sort()) &&
+				new Set(scope.marketOptions).size === scope.marketOptions.length && scope.marketOptions.length === (scope.otcChains.length * (scope.otcChains.length - 1)) / 2 &&
+				scope.marketOptions.includes('DOGE/ROD') && !scope.marketOptions.includes('ROD/DOGE'),
+			JSON.stringify({ definitions: scope.otcChains, asset: scope.assetControl, payment: scope.paymentOptions, markets: scope.marketOptions })
 		);
 		step(
 			'every wallet-only explorer backend has a registered driver',
 			Object.values(scope.explorerSupport).every(Boolean),
 			JSON.stringify(scope.explorerSupport)
+		);
+
+		const chainInfo = await page.evaluate(() => {
+			const registry = window.spexChainRegistry;
+			const codes = registry.codes();
+			const pages = {};
+			for (const code of codes) {
+				const profile = registry.getProfile(code);
+				$('.chainInfoSelect[data-chain="' + code + '"]').trigger('click');
+				const article = document.querySelector('#chainInfoContent .chain-info-page');
+				pages[code] = {
+					renderedCode: article && article.getAttribute('data-chain'),
+					hasDescription: !!(article && article.textContent.includes(profile.description)),
+					endpointLinks: article ? article.querySelectorAll('section a[href^="https://"]').length : 0,
+					routeCards: article ? article.querySelectorAll('.chain-route-card').length : 0,
+					expectedRoutes: registry.verifiedRoutes(code).length,
+					metadataComplete: typeof profile.description === 'string' && profile.description.length >= 40 &&
+						/^https:\/\//.test(profile.website) && /^https:\/\//.test(profile.documentation) &&
+						Array.isArray(profile.repositories) && profile.repositories.length > 0
+				};
+			}
+			const coinsMenu = document.getElementById('coinsMenu');
+			const infoMenu = document.getElementById('chainInfoNavItem');
+			const verifiedMenuCodes = Array.from(document.querySelectorAll('.walletCoinSelect')).filter((link) =>
+				!!link.querySelector('.coin-verified')
+			).map((link) => link.getAttribute('data-coin')).sort();
+			const hostedMenuCodes = Array.from(document.querySelectorAll('.walletCoinSelect .coin-route-hosted')).map((node) => node.closest('.walletCoinSelect').getAttribute('data-coin')).sort();
+			const communityMenuCodes = Array.from(document.querySelectorAll('.walletCoinSelect .coin-route-community')).map((node) => node.closest('.walletCoinSelect').getAttribute('data-coin')).sort();
+			const mainWalletOnlyCodes = Array.from(document.querySelectorAll('.walletCoinSelect .coin-wallet-only')).map((node) => node.closest('.walletCoinSelect').getAttribute('data-coin')).sort();
+			const chainWalletOnlyCodes = Array.from(document.querySelectorAll('.chainInfoSelect .chain-info-wallet-only')).map((node) => node.closest('.chainInfoSelect').getAttribute('data-chain')).sort();
+			const communityMainColors = Array.from(document.querySelectorAll('.walletCoinSelect .coin-route-community')).map((node) => getComputedStyle(node).color);
+			const communityChainColors = Array.from(document.querySelectorAll('.chainInfoSelect .chain-route-community')).map((node) => getComputedStyle(node).color);
+			const hostedMainColors = Array.from(document.querySelectorAll('.walletCoinSelect .coin-route-hosted')).map((node) => getComputedStyle(node).color);
+			const hostedChainColors = Array.from(document.querySelectorAll('.chainInfoSelect .chain-route-hosted')).map((node) => getComputedStyle(node).color);
+			const activeMenuCodes = Array.from(document.querySelectorAll('#walletCoinMenu .wallet-coin-item.active-coin')).map((item) => item.getAttribute('data-coin'));
+			const arrowCount = document.querySelectorAll('#walletCoinMenu .coin-active, #walletCoinMenu .glyphicon-chevron-right').length;
+			$('.chainInfoSelect[data-chain="DOGE"]').trigger('click');
+			const chainClickState = {
+				activeNetwork: coinjs.activeNetwork,
+				asset: $('#nsAssetChain').val(),
+				paymentOptions: Array.from(document.querySelectorAll('#nsPaymentChain option')).map((node) => node.value),
+				activeMenu: document.querySelector('#walletCoinMenu .wallet-coin-item.active-coin') && document.querySelector('#walletCoinMenu .wallet-coin-item.active-coin').getAttribute('data-coin'),
+				hash: window.location.hash
+			};
+			window.spexSetActiveCoin('ROD');
+			return {
+				codes,
+				pages,
+				menuImmediatelyAfterCoins: !!(coinsMenu && infoMenu && coinsMenu.nextElementSibling === infoMenu),
+				verifiedMenuCodes,
+				expectedVerifiedMenuCodes: registry.swapCodes().slice().sort(),
+				hostedMenuCodes,
+				communityMenuCodes,
+				mainWalletOnlyCodes,
+				chainWalletOnlyCodes,
+				communityMainColors,
+				communityChainColors,
+				hostedMainColors,
+				hostedChainColors,
+				activeMenuCodes,
+				arrowCount,
+				chainClickState,
+				canonicalMarket: registry.canonicalMarketKey('ROD', 'DOGE'),
+				hash: window.location.hash
+			};
+		});
+		step(
+			'canonical chain pages are registry-driven for every supported blockchain',
+			chainInfo.codes.every((code) => {
+				const pageInfo = chainInfo.pages[code];
+				return pageInfo.renderedCode === code && pageInfo.hasDescription && pageInfo.endpointLinks >= 5 &&
+					pageInfo.routeCards === pageInfo.expectedRoutes && pageInfo.metadataComplete;
+			}),
+			JSON.stringify(chainInfo.pages)
+		);
+		step(
+			'Chain Info sits after Coins and exposes canonical deep links',
+			chainInfo.menuImmediatelyAfterCoins && /^#chain\/[A-Z0-9]+$/.test(chainInfo.hash) &&
+				chainInfo.canonicalMarket === 'DOGE/ROD',
+			JSON.stringify({ afterCoins: chainInfo.menuImmediatelyAfterCoins, hash: chainInfo.hash, market: chainInfo.canonicalMarket })
+		);
+		step(
+			'route ownership colors, wallet-only icons, and background-only active state are distinct',
+			JSON.stringify(chainInfo.verifiedMenuCodes) === JSON.stringify(chainInfo.expectedVerifiedMenuCodes) &&
+				JSON.stringify(chainInfo.hostedMenuCodes) === JSON.stringify(['ROD']) &&
+				JSON.stringify(chainInfo.communityMenuCodes) === JSON.stringify(['DOGE', 'LTC']) &&
+				JSON.stringify(chainInfo.mainWalletOnlyCodes) === JSON.stringify(['BCH', 'BTC', 'DGB']) &&
+				JSON.stringify(chainInfo.chainWalletOnlyCodes) === JSON.stringify(['BCH', 'BTC', 'DGB']) &&
+				chainInfo.communityMainColors.every((color) => color === 'rgb(57, 169, 255)') &&
+				chainInfo.communityChainColors.every((color) => color === 'rgb(57, 169, 255)') &&
+				chainInfo.hostedMainColors.every((color) => color === 'rgb(71, 209, 108)') &&
+				chainInfo.hostedChainColors.every((color) => color === 'rgb(71, 209, 108)') &&
+				chainInfo.activeMenuCodes.length === 1 && chainInfo.arrowCount === 0,
+			JSON.stringify({ verified: chainInfo.verifiedMenuCodes, hosted: chainInfo.hostedMenuCodes, community: chainInfo.communityMenuCodes, mainWalletOnly: chainInfo.mainWalletOnlyCodes, chainWalletOnly: chainInfo.chainWalletOnlyCodes, communityMainColors: chainInfo.communityMainColors, communityChainColors: chainInfo.communityChainColors, hostedMainColors: chainInfo.hostedMainColors, hostedChainColors: chainInfo.hostedChainColors, active: chainInfo.activeMenuCodes, arrows: chainInfo.arrowCount })
+		);
+		step(
+			'clicking a Chain Info coin switches the active network and locked OTC asset website-wide',
+			chainInfo.chainClickState.activeNetwork === 'DOGE' && chainInfo.chainClickState.asset === 'DOGE' &&
+				chainInfo.chainClickState.activeMenu === 'DOGE' && chainInfo.chainClickState.paymentOptions.indexOf('DOGE') === -1 &&
+				chainInfo.chainClickState.hash === '#chain/DOGE',
+			JSON.stringify(chainInfo.chainClickState)
+		);
+
+		const activeWalletIdentity = await page.evaluate(() => {
+			window.spexSetActiveCoin('ROD');
+			$('#captcha').val('2');
+			$('#openEmail').val('browser-gate@example.com');
+			$('#openPass, #openPassConfirm').val('StrongBrowserGate1!');
+			$('#openWalletRiskAcknowledgement').prop('checked', true);
+			$('#openBtn').trigger('click');
+			const rodAddress = $.trim($('#walletAddress').text());
+			window.spexSetActiveCoin('LTC');
+			const ltcAddress = $.trim($('#walletAddress').text());
+			const ltcIdentity = $('#nsMyAddr').val();
+			$('.chainInfoSelect[data-chain="DOGE"]').trigger('click');
+			const dogeAddress = $.trim($('#walletAddress').text());
+			const dogeIdentity = $('#nsMyAddr').val();
+			const engineIdentity = rodOtc.engine.getWalletIdentity();
+			const result = {
+				rodAddress, ltcAddress, ltcIdentity, dogeAddress, dogeIdentity,
+				activeChain: engineIdentity && engineIdentity.activeChain,
+				activeAddress: engineIdentity && engineIdentity.activeAddress,
+				rodControlAddress: engineIdentity && engineIdentity.rodAddress
+			};
+			$('#walletLogout').trigger('click');
+			window.spexSetActiveCoin('ROD');
+			return result;
+		});
+		step(
+			'wallet address and visible OTC identity re-derive immediately with the active coin',
+			activeWalletIdentity.rodAddress && activeWalletIdentity.ltcAddress && activeWalletIdentity.dogeAddress &&
+				activeWalletIdentity.rodAddress !== activeWalletIdentity.ltcAddress &&
+				activeWalletIdentity.ltcAddress !== activeWalletIdentity.dogeAddress &&
+				activeWalletIdentity.ltcIdentity === activeWalletIdentity.ltcAddress &&
+				activeWalletIdentity.dogeIdentity === activeWalletIdentity.dogeAddress &&
+				activeWalletIdentity.activeChain === 'DOGE' &&
+				activeWalletIdentity.activeAddress === activeWalletIdentity.dogeAddress &&
+				activeWalletIdentity.rodControlAddress === activeWalletIdentity.rodAddress,
+			JSON.stringify(activeWalletIdentity)
 		);
 
 		const settingsRegistry = await page.evaluate(() => {

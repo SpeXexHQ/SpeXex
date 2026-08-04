@@ -94,6 +94,7 @@
 									<li class="dropdown-header">Loading chain registry…</li>
 								</ul>
 							</li>
+							<li id="chainInfoNavItem"><a href="#chainInfo" data-toggle="tab"><span class="glyphicon glyphicon-info-sign"></span> Chain Info</a></li>
 							<li class="dropdown">
 								<a href="#" class="dropdown-toggle" data-toggle="dropdown"><span class="glyphicon glyphicon-briefcase"></span> Wallet <b class="caret"></b></a>
 								<ul class="dropdown-menu">
@@ -241,6 +242,20 @@
 									<p>ROD, LTC, and DOGE are currently swap-certified and any two can be paired in either direction. BTC, BCH, and DGB currently have wallet-level support only. More chains are being added through the same reviewed registry.</p>
 								</div>
 							</div>
+						</div>
+					</div>
+
+					<div class="tab-pane tab-content" id="chainInfo">
+						<div class="row chain-info-heading">
+							<div class="col-md-12">
+								<p class="rod-eyebrow">Canonical registry pages</p>
+								<h2>Supported blockchains <small>parameters, endpoints, repositories and verified routes</small></h2>
+								<p class="text-muted">Every page below is rendered directly from <code>js/chain-registry.js</code>. The page does not maintain a second chain table.</p>
+							</div>
+						</div>
+						<div class="row">
+							<div class="col-md-3"><div id="chainInfoList" class="list-group chain-info-list"></div></div>
+							<div class="col-md-9"><div id="chainInfoContent" aria-live="polite"></div></div>
 						</div>
 					</div>
 

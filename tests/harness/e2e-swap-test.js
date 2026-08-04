@@ -598,9 +598,9 @@ async function main() {
 
   // ---- Alice creates & starts the swap ----
   await alice.evaluate(({ rod, alt, assetCode, altCode, peerXpub, peerRodIdentity, peerAssetPayout, release }) => {
-    /* Select the counter chain FIRST: fees, dust limits, refund block counts
-       and the payout address all derive from it. */
-    $('#nsAssetChain').val(assetCode);
+    /* The asset is the website-wide active coin. Switching it here exercises
+       the same path as Coins and Chain Info; only the payment leg remains selectable. */
+    window.spexSetActiveCoin(assetCode);
     $('#nsPaymentChain').val(altCode).trigger('change');
     $('#nsRole').val('seller');
     $('#nsRod').val(rod);

@@ -32,6 +32,13 @@
 			shortName: 'SpaceXpanse',
 			unit: 'ROD',
 			uriPrefix: 'rod',
+			description: 'SpaceXpanse ROD is the native utility coin and settlement/data layer of the SpaceXpanse Multiverse. Its UTXO blockchain supports payments, arbitrary names and data, digital identities, tokens, NFTs and trustless atomic trading.',
+			website: 'https://rod.spacexpanse.org',
+			documentation: 'https://docs.spacexpanse.org',
+			repositories: [
+				{ label: 'ROD Core wallet', url: 'https://github.com/SpaceXpanse/rod-core-wallet' },
+				{ label: 'SpaceXpanse documentation', url: 'https://github.com/SpaceXpanse/Documentation/wiki' }
+			],
 			address: { pub: 0x3c, priv: 0x4e, multisig: 0x4b },
 			hdkey: { prv: 0x04881eb2, pub: 0x0488e4ad },
 			bech32: { charset: BECH32_CHARSET, version: 0, hrp: 'rod' },
@@ -41,7 +48,7 @@
 				addr: 'https://explorer.rod.spacexpanse.org/address/',
 				block: 'https://explorer.rod.spacexpanse.org/blocks/'
 			},
-			api: { type: 'rod', base: 'https://api.spacexpanse.org:1234' },
+			api: { type: 'rod', base: 'https://api.spacexpanse.org:1234', operator: 'spexex' },
 			swap: {
 				status: 'certified',
 				transactionModel: 'bitcoin-utxo',
@@ -77,6 +84,12 @@
 			shortName: 'Litecoin',
 			unit: 'LTC',
 			uriPrefix: 'litecoin',
+			description: 'Litecoin is a peer-to-peer UTXO cryptocurrency designed for fast, low-cost payments. It uses Scrypt proof of work and remains closely compatible with Bitcoin-style transaction and scripting primitives.',
+			website: 'https://litecoin.org',
+			documentation: 'https://github.com/litecoin-project/litecoin/tree/master/doc',
+			repositories: [
+				{ label: 'Litecoin Core', url: 'https://github.com/litecoin-project/litecoin' }
+			],
 			address: { pub: 0x30, priv: 0xb0, multisig: 0x32 },
 			hdkey: { prv: 0x019d9cfe, pub: 0x019da462 },
 			bech32: { charset: BECH32_CHARSET, version: 0, hrp: 'ltc' },
@@ -86,7 +99,7 @@
 				addr: 'https://litecoinspace.org/address/',
 				block: 'https://litecoinspace.org/block/'
 			},
-			api: { type: 'esplora', base: 'https://litecoinspace.org/api' },
+			api: { type: 'esplora', base: 'https://litecoinspace.org/api', operator: 'community' },
 			swap: {
 				status: 'certified',
 				transactionModel: 'bitcoin-utxo',
@@ -124,6 +137,12 @@
 			shortName: 'Dogecoin',
 			unit: 'DOGE',
 			uriPrefix: 'dogecoin',
+			description: 'Dogecoin is a community-driven peer-to-peer UTXO cryptocurrency using Scrypt proof of work. Its current settlement profile uses legacy Bitcoin-style transactions and deliberately does not expose SegWit addresses.',
+			website: 'https://dogecoin.com',
+			documentation: 'https://dogecoin.com/dogepedia/',
+			repositories: [
+				{ label: 'Dogecoin Core', url: 'https://github.com/dogecoin/dogecoin' }
+			],
 			address: { pub: 0x1e, priv: 0x9e, multisig: 0x16 },
 			hdkey: { prv: 0x02fac398, pub: 0x02facafd },
 			/* Dogecoin has no SegWit/bech32, but the shared charset remains
@@ -135,7 +154,7 @@
 				addr: 'https://blockchair.com/dogecoin/address/',
 				block: 'https://blockchair.com/dogecoin/block/'
 			},
-			api: { type: 'blockcypher', base: 'https://api.blockcypher.com/v1/doge/main' },
+			api: { type: 'blockcypher', base: 'https://api.blockcypher.com/v1/doge/main', operator: 'community' },
 			swap: {
 				status: 'certified',
 				transactionModel: 'bitcoin-utxo',
@@ -171,6 +190,12 @@
 			shortName: 'Bitcoin',
 			unit: 'BTC',
 			uriPrefix: 'bitcoin',
+			description: 'Bitcoin is the original decentralized UTXO cryptocurrency and the reference design for Bitcoin-style transactions, scripts, keys and address formats used throughout this wallet.',
+			website: 'https://bitcoin.org',
+			documentation: 'https://developer.bitcoin.org',
+			repositories: [
+				{ label: 'Bitcoin Core', url: 'https://github.com/bitcoin/bitcoin' }
+			],
 			address: { pub: 0x00, priv: 0x80, multisig: 0x05 },
 			hdkey: { prv: 0x0488ade4, pub: 0x0488b21e },
 			bech32: { charset: BECH32_CHARSET, version: 0, hrp: 'bc' },
@@ -180,7 +205,7 @@
 				addr: 'https://mempool.space/address/',
 				block: 'https://mempool.space/block/'
 			},
-			api: { type: 'esplora', base: 'https://mempool.space/api' },
+			api: { type: 'esplora', base: 'https://mempool.space/api', operator: 'community' },
 			swap: { status: 'wallet-only' }
 		},
 		BCH: {
@@ -189,6 +214,12 @@
 			shortName: 'Bitcoin Cash',
 			unit: 'BCH',
 			uriPrefix: 'bitcoincash',
+			description: 'Bitcoin Cash is a peer-to-peer UTXO cryptocurrency derived from Bitcoin, focused on on-chain payments and larger block capacity. This build currently exposes wallet and explorer functionality only.',
+			website: 'https://bitcoincash.org',
+			documentation: 'https://documentation.cash',
+			repositories: [
+				{ label: 'Bitcoin Cash Node', url: 'https://gitlab.com/bitcoin-cash-node/bitcoin-cash-node' }
+			],
 			address: { pub: 0x00, priv: 0x80, multisig: 0x05 },
 			hdkey: { prv: 0x0488ade4, pub: 0x0488b21e },
 			bech32: { charset: BECH32_CHARSET, version: 0, hrp: '' },
@@ -198,7 +229,7 @@
 				addr: 'https://blockchair.com/bitcoin-cash/address/',
 				block: 'https://blockchair.com/bitcoin-cash/block/'
 			},
-			api: { type: 'blockbook', base: 'https://bch1.trezor.io' },
+			api: { type: 'blockbook', base: 'https://bch1.trezor.io', operator: 'community' },
 			swap: { status: 'wallet-only' }
 		},
 		DGB: {
@@ -207,6 +238,12 @@
 			shortName: 'DigiByte',
 			unit: 'DGB',
 			uriPrefix: 'digibyte',
+			description: 'DigiByte is a multi-algorithm proof-of-work UTXO blockchain designed for fast block production and broad mining participation. This build currently exposes wallet and explorer functionality only.',
+			website: 'https://digibyte.org',
+			documentation: 'https://docs.digibyte.org',
+			repositories: [
+				{ label: 'DigiByte Core', url: 'https://github.com/DigiByte-Core/digibyte' }
+			],
 			address: { pub: 0x1e, priv: 0x80, multisig: 0x3f },
 			hdkey: { prv: 0x0488ade4, pub: 0x0488b21e },
 			bech32: { charset: BECH32_CHARSET, version: 0, hrp: 'dgb' },
@@ -216,7 +253,7 @@
 				addr: 'https://digiexplorer.info/address/',
 				block: 'https://digiexplorer.info/block/'
 			},
-			api: { type: 'esplora', base: 'https://digiexplorer.info/api' },
+			api: { type: 'esplora', base: 'https://digiexplorer.info/api', operator: 'community' },
 			swap: { status: 'wallet-only' }
 		}
 	};
@@ -250,6 +287,20 @@
 		requireValue(typeof profile.unit === 'string' && profile.unit.length > 0, code + ' unit is missing');
 		requireValue(typeof profile.uriPrefix === 'string' && /^[a-z][a-z0-9+.-]*$/.test(profile.uriPrefix),
 			code + ' URI prefix is missing or invalid');
+		requireValue(typeof profile.description === 'string' && profile.description.length >= 40,
+			code + ' description is missing or too short');
+		['website', 'documentation'].forEach(function(field){
+			requireValue(typeof profile[field] === 'string' && /^https:\/\//.test(profile[field]),
+				code + ' ' + field + ' URL is missing or invalid');
+		});
+		requireValue(Array.isArray(profile.repositories) && profile.repositories.length > 0,
+			code + ' repositories are missing');
+		profile.repositories.forEach(function(repository, index){
+			requireValue(repository && typeof repository.label === 'string' && repository.label.length > 0,
+				code + ' repository ' + index + ' label is missing');
+			requireValue(typeof repository.url === 'string' && /^https:\/\//.test(repository.url),
+				code + ' repository ' + index + ' URL is invalid');
+		});
 		requireValue(profile.address, code + ' address versions are missing');
 		['pub', 'priv', 'multisig'].forEach(function(field){
 			requireValue(nonNegativeInteger(profile.address[field]) && profile.address[field] <= 255,
@@ -270,6 +321,8 @@
 			code + ' explorer links are incomplete');
 		requireValue(profile.api && profile.api.type && /^https?:\/\//.test(profile.api.base),
 			code + ' API profile is incomplete');
+		requireValue(profile.api.operator === 'spexex' || profile.api.operator === 'community',
+			code + ' API operator must be spexex or community');
 		requireValue(profile.swap && (profile.swap.status === 'certified' || profile.swap.status === 'wallet-only'),
 			code + ' swap status must be certified or wallet-only');
 
@@ -343,6 +396,42 @@
 			return certifiedCodes.slice(0);
 		}
 
+		function canonicalMarketKey(firstCode, secondCode){
+			var first = String(firstCode || '').toUpperCase();
+			var second = String(secondCode || '').toUpperCase();
+			if(!stored[first] || !stored[second]) throw new Error('Unknown chain in market: ' + first + '/' + second);
+			if(first === second) throw new Error('A market requires two distinct chains');
+			return [first, second].sort().join('/');
+		}
+
+		function routeStatusForChain(code){
+			var normalized = String(code || '').toUpperCase();
+			if(!stored[normalized]) throw new Error('Unknown chain profile: ' + normalized);
+			var operator = stored[normalized].api.operator;
+			return {
+				code: normalized,
+				operator: operator,
+				status: operator === 'spexex' ? 'verified-hosted' : 'community-run',
+				label: operator === 'spexex' ? 'Verified route · SpeXex-hosted' : 'Community-run route · external server'
+			};
+		}
+
+		function verifiedRoutes(code){
+			var normalized = String(code || '').toUpperCase();
+			if(!stored[normalized]) throw new Error('Unknown chain profile: ' + normalized);
+			if(stored[normalized].swap.status !== 'certified') return [];
+			return certifiedCodes.filter(function(other){ return other !== normalized; }).map(function(other){
+				var market = canonicalMarketKey(normalized, other);
+				var parts = market.split('/');
+				return {
+					market: market,
+					routes: [normalized + '/' + other, other + '/' + normalized],
+					status: 'verified',
+					legs: [routeStatusForChain(parts[0]), routeStatusForChain(parts[1])]
+				};
+			});
+		}
+
 		function walletNetworks(){
 			var output = {};
 			codes.forEach(function(code){
@@ -362,6 +451,8 @@
 					explorer: clone(profile.explorer),
 					apiType: profile.api.type,
 					apiBase: profile.api.base,
+					apiOperator: profile.api.operator,
+					routeStatus: routeStatusForChain(code),
 					swapStatus: profile.swap.status
 				};
 			});
@@ -405,6 +496,9 @@
 			swapCodes: swapCodes,
 			getProfile: getProfile,
 			profiles: function(){ return clone(stored); },
+			canonicalMarketKey: canonicalMarketKey,
+			routeStatusForChain: routeStatusForChain,
+			verifiedRoutes: verifiedRoutes,
 			walletNetworks: walletNetworks,
 			swapDefinitions: swapDefinitions,
 			swapPolicies: swapPolicies,

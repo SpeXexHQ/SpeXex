@@ -3,7 +3,7 @@
 
 # SpeXex
 
-Static browser-based web wallet, PWA shell, and experimental OTC swap client.
+Static browser-based SpaceXpanse ROD wallet, PWA shell, and experimental OTC swap client.
 
 ## Experimental disclaimer
 
@@ -18,7 +18,7 @@ Static browser-based web wallet, PWA shell, and experimental OTC swap client.
 
 ## What SpeXex is
 
-[`SpeXex`](README.md) is the current project identity for this repository. It is a static browser wallet using SpaceXpanse ROD as the control plane for identity, reputation, offer ownership and order publishing, extended with an integrated OTC swap runtime that can coordinate trust-minimized swaps between certified Bitcoin-derived chains.
+[`SpeXex`](README.md) is the current project identity for this repository. It is a static browser wallet centered on SpaceXpanse ROD, extended with an integrated OTC swap runtime that can coordinate trust-minimized swaps between certified Bitcoin-derived chains.
 
 The codebase is intentionally build-free at the repository root:
 

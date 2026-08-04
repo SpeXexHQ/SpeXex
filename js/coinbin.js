@@ -98,13 +98,163 @@ return typeof value === "string" && value !== "1";
 			for(var codeIndex = 0; codeIndex < groupCodes.length; codeIndex++){
 				var chainCode = groupCodes[codeIndex];
 				var network = coinjs.networks[chainCode];
-				var $check = $('<span>').addClass('glyphicon glyphicon-ok coin-check hidden').attr('data-coin', chainCode);
+				var routeStatus = network.routeStatus || { status: 'community-run', label: 'Community-run route · external server' };
+				var routeClass = routeStatus.status === 'verified-hosted' ? 'coin-route-hosted' : 'coin-route-community';
+				var $verified = network.swapStatus === 'certified'
+					? $('<span>').addClass('glyphicon glyphicon-ok-sign coin-verified ' + routeClass).attr('title', routeStatus.label)
+					: $('<span>').addClass('glyphicon glyphicon-briefcase coin-wallet-only').attr('title', 'Wallet only');
 				var $link = $('<a>').attr('href', 'javascript:;').addClass('walletCoinSelect').attr('data-coin', chainCode);
-				$link.append($check).append(document.createTextNode(' ' + chainCode + ' '));
+				$link.append($verified).append(document.createTextNode(' ' + chainCode + ' '));
 				$link.append($('<small>').addClass('text-muted').text(network.shortName || network.name || chainCode));
-				$menu.append($('<li>').append($link));
+				$menu.append($('<li>').addClass('wallet-coin-item').attr('data-coin', chainCode).append($link));
 			}
 		}
+	}
+
+
+	function chainInfoEsc(value){
+		return $('<span>').text(value == null ? '' : String(value)).html();
+	}
+
+	function chainInfoHex(value, width){
+		var hex = Number(value).toString(16);
+		while(hex.length < (width || 2)) hex = '0' + hex;
+		return '0x' + hex;
+	}
+
+	function chainInfoSafeLink(url, label){
+		if(typeof url !== 'string' || !/^https:\/\//.test(url)) return chainInfoEsc(label || url || '—');
+		return '<a href="' + chainInfoEsc(url) + '" target="_blank" rel="noopener noreferrer">' + chainInfoEsc(label || url) + '</a>';
+	}
+
+	function chainInfoCodeFromHash(){
+		var match = String(window.location.hash || '').match(/^#chain\/([A-Z0-9]{2,10})$/i);
+		return match ? normalizeCoinCode(match[1]) : '';
+	}
+
+	function renderChainInfoNavigation(selectedCode){
+		var registry = window.spexChainRegistry;
+		var $list = $('#chainInfoList');
+		if(!$list.length || !registry) return;
+		$list.empty();
+		registry.codes().forEach(function(code){
+			var profile = registry.getProfile(code);
+			var certified = profile.swap.status === 'certified';
+			var routeStatus = registry.routeStatusForChain(code);
+			var routeClass = routeStatus.status === 'verified-hosted' ? 'chain-route-hosted' : 'chain-route-community';
+			var $link = $('<a>')
+				.attr('href', '#chain/' + code)
+				.attr('data-chain', code)
+				.addClass('list-group-item chainInfoSelect' + (code === selectedCode ? ' active' : ''));
+			$link.append($('<span>').addClass('chain-info-code').text(code));
+			if(certified){
+				$link.append($('<span>').addClass('glyphicon glyphicon-ok-sign chain-info-verified ' + routeClass).attr('title', routeStatus.label));
+			} else {
+				$link.append($('<span>').addClass('glyphicon glyphicon-briefcase chain-info-wallet-only').attr('title', 'Wallet only'));
+			}
+			$link.append($('<span>').addClass('chain-info-name').text(profile.shortName || profile.name));
+			$list.append($link);
+		});
+	}
+
+	function chainInfoRows(profile){
+		var rows = [
+			['Ticker / unit', profile.code + ' / ' + profile.unit],
+			['URI prefix', profile.uriPrefix + ':'],
+			['P2PKH version', profile.address.pub + ' (' + chainInfoHex(profile.address.pub) + ')'],
+			['WIF version', profile.address.priv + ' (' + chainInfoHex(profile.address.priv) + ')'],
+			['P2SH version', profile.address.multisig + ' (' + chainInfoHex(profile.address.multisig) + ')'],
+			['HD private', chainInfoHex(profile.hdkey.prv, 8)],
+			['HD public', chainInfoHex(profile.hdkey.pub, 8)],
+			['SegWit', profile.segwit === false ? 'Not supported' : 'Supported'],
+			['Bech32 HRP', profile.bech32.hrp || 'Not available'],
+			['API adapter', profile.api.type]
+		];
+		if(profile.swap.status === 'certified'){
+			rows.push(['Transaction model', profile.swap.transactionModel]);
+			rows.push(['Curve / signature', profile.swap.curve + ' / ' + profile.swap.signature]);
+			rows.push(['Escrow', profile.swap.escrow]);
+			rows.push(['Sighash', profile.swap.sighash]);
+			rows.push(['Timelock', profile.swap.timelock]);
+			rows.push(['Target block time', profile.swap.blockSeconds + ' seconds']);
+			rows.push(['Confirmations', profile.swap.confirmations]);
+			rows.push(['Asset / payment refunds', profile.swap.refundBlocks.asset + ' / ' + profile.swap.refundBlocks.payment + ' blocks']);
+		}
+		return rows.map(function(row){
+			return '<tr><th>' + chainInfoEsc(row[0]) + '</th><td><code>' + chainInfoEsc(row[1]) + '</code></td></tr>';
+		}).join('');
+	}
+
+	function renderChainInfo(code){
+		var registry = window.spexChainRegistry;
+		var normalized = normalizeCoinCode(code || getActiveCoin());
+		var $content = $('#chainInfoContent');
+		if(!$content.length || !registry) return normalized;
+		var profile = registry.getProfile(normalized);
+		var certified = profile.swap.status === 'certified';
+		var routes = registry.verifiedRoutes(normalized);
+		var repositoryLinks = profile.repositories.map(function(repository){
+			return '<li>' + chainInfoSafeLink(repository.url, repository.label) + '</li>';
+		}).join('');
+		var endpointRows = [
+			['API endpoint', profile.api.base],
+			['Transaction explorer', profile.explorer.tx],
+			['Address explorer', profile.explorer.addr],
+			['Block explorer', profile.explorer.block]
+		].map(function(endpoint){
+			return '<tr><th>' + chainInfoEsc(endpoint[0]) + '</th><td>' + chainInfoSafeLink(endpoint[1], endpoint[1]) + '</td></tr>';
+		}).join('');
+		var routeHtml = routes.length ? routes.map(function(route){
+			var legs = (route.legs || []).map(function(leg){
+				var legClass = leg.status === 'verified-hosted' ? 'chain-route-leg-hosted' : 'chain-route-leg-community';
+				return '<span class="chain-route-leg ' + legClass + '"><span class="glyphicon glyphicon-ok-sign"></span> <b>' + chainInfoEsc(leg.code) + '</b> · ' + chainInfoEsc(leg.label) + '</span>';
+			}).join('');
+			return '<div class="chain-route-card"><div class="chain-route-market"><b>' + chainInfoEsc(route.market) + '</b> <span class="label label-default">canonical market</span></div>' +
+				'<div class="chain-route-directions text-muted">' + route.routes.map(chainInfoEsc).join(' &nbsp;·&nbsp; ') + '</div><div class="chain-route-legs">' + legs + '</div></div>';
+		}).join('') : '<p class="text-muted">No OTC swap route is certified for this wallet-only chain.</p>';
+		var selectedRouteStatus = registry.routeStatusForChain(normalized);
+		var selectedRouteClass = selectedRouteStatus.status === 'verified-hosted' ? 'chain-status-hosted' : 'chain-status-community';
+		var swapFacts = certified ? [
+			'<div class="chain-status ' + selectedRouteClass + '"><span class="glyphicon glyphicon-ok-sign"></span><div><b>' + chainInfoEsc(selectedRouteStatus.label) + '</b><br><span>Protocol-certified as either asset or payment chain in every canonical market listed below.</span></div></div>',
+			'<table class="table table-condensed chain-info-table"><tbody>',
+			'<tr><th>Claim fee</th><td><code>' + chainInfoEsc(profile.swap.fees.claim + ' ' + profile.unit) + '</code></td></tr>',
+			'<tr><th>Refund fee</th><td><code>' + chainInfoEsc(profile.swap.fees.refund + ' ' + profile.unit) + '</code></td></tr>',
+			'<tr><th>Funding fee</th><td><code>' + chainInfoEsc(profile.swap.fees.funding + ' ' + profile.unit) + '</code></td></tr>',
+			'<tr><th>Hard dust floor</th><td><code>' + chainInfoEsc(profile.swap.policy.hardDustSats + ' base units') + '</code></td></tr>',
+			'<tr><th>Change threshold</th><td><code>' + chainInfoEsc(profile.swap.policy.changeThresholdSats + ' base units') + '</code></td></tr>',
+			'</tbody></table>'
+		].join('') : '<div class="chain-status chain-status-wallet"><span class="glyphicon glyphicon-briefcase"></span><div><b>Wallet support only</b><br><span>Address, key, explorer and transaction tools are available; OTC settlement is not certified.</span></div></div>';
+
+		$content.html([
+			'<article class="chain-info-page" data-chain="' + chainInfoEsc(normalized) + '">',
+			'<header class="chain-info-hero"><div><p class="rod-eyebrow">' + chainInfoEsc(profile.swap.status === 'certified' ? 'Verified settlement chain' : 'Wallet-supported chain') + '</p>',
+			'<h1>' + chainInfoEsc(profile.name) + ' <small>' + chainInfoEsc(profile.code) + '</small></h1>',
+			'<p>' + chainInfoEsc(profile.description) + '</p></div>',
+			'<div class="chain-info-status-badge ' + (certified ? (selectedRouteStatus.status === 'verified-hosted' ? 'is-hosted' : 'is-community') : 'is-wallet') + '">' + (certified ? '<span class="glyphicon glyphicon-ok-sign"></span> ' + chainInfoEsc(selectedRouteStatus.label) : '<span class="glyphicon glyphicon-briefcase"></span> Wallet only') + '</div></header>',
+			'<div class="row chain-info-grid"><div class="col-md-6"><section class="chain-info-card"><h3>Network parameters</h3><table class="table table-condensed chain-info-table"><tbody>' + chainInfoRows(profile) + '</tbody></table></section></div>',
+			'<div class="col-md-6"><section class="chain-info-card"><h3>Endpoints</h3><table class="table table-condensed chain-info-table"><tbody>' + endpointRows + '</tbody></table></section>',
+			'<section class="chain-info-card"><h3>Official resources</h3><ul class="chain-info-links"><li>' + chainInfoSafeLink(profile.website, 'Official website') + '</li><li>' + chainInfoSafeLink(profile.documentation, 'Documentation') + '</li>' + repositoryLinks + '</ul></section></div></div>',
+			'<div class="row chain-info-grid"><div class="col-md-6"><section class="chain-info-card"><h3>Support status</h3>' + swapFacts + '</section></div>',
+			'<div class="col-md-6"><section class="chain-info-card"><h3>Verified swap routes</h3>' + routeHtml + '</section></div></div>',
+			'<p class="chain-info-canonical"><span class="glyphicon glyphicon-link"></span> Canonical page: <code>#chain/' + chainInfoEsc(normalized) + '</code></p>',
+			'</article>'
+		].join(''));
+		renderChainInfoNavigation(normalized);
+		return normalized;
+	}
+
+	function openChainInfo(code, updateHash){
+		var normalized = renderChainInfo(code);
+		if(updateHash){
+			var target = '#chain/' + normalized;
+			if(window.history && window.history.replaceState) window.history.replaceState(null, '', target);
+			else window.location.hash = target;
+		}
+		/* Set the canonical hash before Bootstrap emits shown.bs.tab. Otherwise
+		   the first page opened from another tab can be overwritten by the hash
+		   of the previously viewed chain. */
+		$('a[href="#chainInfo"]').tab('show');
+		document.title = window.spexChainRegistry.getProfile(normalized).name + ' (' + normalized + ') Chain Information | SpeXex';
 	}
 
 	function getActiveCoin(){
@@ -176,8 +326,8 @@ return typeof value === "string" && value !== "1";
 		$('.js-coin-unit').text(unit);
 		$('.js-coin-name').text(net.name || unit);
 		document.title = net.name + ' Wallet by rod-web-wallet';
-		$('.coin-check').addClass('hidden');
-		$('.coin-check[data-coin="'+net.code+'"]').removeClass('hidden');
+		$('#walletCoinMenu .wallet-coin-item').removeClass('active-coin');
+		$('#walletCoinMenu .wallet-coin-item[data-coin="'+net.code+'"]').addClass('active-coin');
 		/* Spend form copy */
 		$('#walletSpend h3').html('<span class="glyphicon glyphicon-send"></span> Send '+unit);
 		$('#walletSpend .text-muted').first().text('Enter a recipient and amount, then review before broadcasting.');
@@ -191,6 +341,8 @@ return typeof value === "string" && value !== "1";
 	function applyActiveCoin(coin, options){
 		var opts = options || {};
 		var c = normalizeCoinCode(coin);
+
+
 		try { window.localStorage.setItem(ACTIVE_COIN_KEY, c); } catch (e) { /* ignore */ }
 		if(coinjs.setNetwork){
 			coinjs.setNetwork(c);
@@ -211,6 +363,7 @@ return typeof value === "string" && value !== "1";
 
 		syncExplorersFromNetwork();
 		refreshSiteCoinLabels();
+		if($('#chainInfo').hasClass('active')) renderChainInfo(c);
 
 		/* Keep settings panel fields in sync */
 		$("#coinjs_pub").val('0x'+(coinjs.pub).toString(16));
@@ -223,7 +376,9 @@ return typeof value === "string" && value !== "1";
 		}
 
 		if(!opts.skipWallet && openWalletData){
-			/* Re-encode WIF + address for the active network */
+			/* Re-encode WIF + address for the active network. A non-SegWit coin
+			   must never inherit a Bech32/P2SH-SegWit display mode from the
+			   previously active network. */
 			if(openWalletData.privkey){
 				openWalletData.compressed = (typeof openWalletData.compressed === 'boolean') ? openWalletData.compressed : true;
 				openWalletData.wif = walletWifForActiveNetwork(openWalletData);
@@ -232,8 +387,11 @@ return typeof value === "string" && value !== "1";
 				openWalletData.pubkey = coinjs.newPubkey(openWalletData.privkey);
 				coinjs.compressed = prevC;
 			}
-			renderOpenWallet(openWalletData.addressType || getWalletAddressType());
+			var nextAddressType = openWalletData.addressType || getWalletAddressType();
+			if(coinjs.supportsSegwit && !coinjs.supportsSegwit()) nextAddressType = 'legacy';
+			renderOpenWallet(nextAddressType);
 		}
+		$(document).trigger('spexActiveCoinChanged', [c]);
 		return c;
 	}
 
@@ -244,6 +402,9 @@ return typeof value === "string" && value !== "1";
 	function updateActiveCoinUi(coin){
 		refreshSiteCoinLabels();
 	}
+
+	window.spexSetActiveCoin = setActiveCoin;
+	window.spexGetActiveCoin = getActiveCoin;
 
 	/* Persist open-wallet session across page reloads (cleared on Logout).
 	   Stores network-agnostic privkey so Coins menu can re-encode ROD/LTC WIF. */
@@ -424,6 +585,7 @@ return typeof value === "string" && value !== "1";
 			return;
 		}
 
+		if(coinjs.supportsSegwit && !coinjs.supportsSegwit()) addressType = 'legacy';
 		var net = coinjs.getNetwork ? coinjs.getNetwork() : {'unit':'ROD','uriPrefix':'rod','code':'ROD'};
 		if(openWalletData.privkey){
 			openWalletData.wif = walletWifForActiveNetwork(openWalletData);
@@ -644,7 +806,31 @@ return typeof value === "string" && value !== "1";
 	/* Apply saved coin network site-wide, then restore wallet if any. */
 	renderWalletCoinMenu();
 	applyActiveCoin(getActiveCoin(), {skipWallet: true});
+	renderChainInfoNavigation(getActiveCoin());
+	renderChainInfo(chainInfoCodeFromHash() || getActiveCoin());
 	restoreWalletSession();
+
+	$(document).on('click', '.chainInfoSelect', function(event){
+		event.preventDefault();
+		var code = setActiveCoin($(this).attr('data-chain'));
+		openChainInfo(code, true);
+	});
+	$('a[href="#chainInfo"]').on('shown.bs.tab', function(){
+		var requested = chainInfoCodeFromHash();
+		if(requested) renderChainInfo(requested);
+		else openChainInfo(getActiveCoin(), true);
+	});
+	$(window).on('hashchange', function(){
+		var requested = chainInfoCodeFromHash();
+		if(requested){
+			setActiveCoin(requested);
+			openChainInfo(requested, false);
+		}
+	});
+	if(chainInfoCodeFromHash()){
+		setActiveCoin(chainInfoCodeFromHash());
+		openChainInfo(chainInfoCodeFromHash(), false);
+	}
 
 	$("#walletToSegWit").click(function(){
 		renderOpenWallet('segwit');

@@ -584,8 +584,17 @@ const tests = [
 	['recovery export/import restores live swap state', testRecoveryExportImportRestoresLiveSwap]
 ];
 
+const filter = process.env.SECURITY_REGRESSION_FILTER;
+const selectedTests = filter
+	? tests.filter(([name]) => filter.split(',').map((part) => part.trim()).filter(Boolean).includes(name))
+	: tests;
+if (filter && selectedTests.length === 0) {
+	console.error('FAIL security regression filter matched no groups: ' + filter);
+	process.exit(64);
+}
+
 let passed = 0;
-for (const [name, test] of tests) {
+for (const [name, test] of selectedTests) {
 	try {
 		test();
 		passed += 1;
@@ -595,4 +604,5 @@ for (const [name, test] of tests) {
 		process.exitCode = 1;
 	}
 }
-console.log(passed + '/' + tests.length + ' security regression groups passed');
+const label = filter ? ' selected security regression groups passed' : ' security regression groups passed';
+console.log(passed + '/' + selectedTests.length + label);

@@ -30,6 +30,42 @@ $(function () {
 		return html.join('');
 	}
 
+	function activeSiteCoin() {
+		var code = window.spexGetActiveCoin ? window.spexGetActiveCoin() : ((coinjs.getNetwork && coinjs.getNetwork().code) || SWAP.DEFAULT_ASSET_CHAIN);
+		code = String(code || '').toUpperCase();
+		return coinjs.networks[code] ? code : SWAP.DEFAULT_ASSET_CHAIN;
+	}
+
+	function canonicalMarketKey(first, second) {
+		if (window.spexChainRegistry && window.spexChainRegistry.canonicalMarketKey) {
+			return window.spexChainRegistry.canonicalMarketKey(first, second);
+		}
+		return [String(first || '').toUpperCase(), String(second || '').toUpperCase()].sort().join('/');
+	}
+
+	function marketView(offer) {
+		var asset = String(offer.assetChain || SWAP.DEFAULT_ASSET_CHAIN).toUpperCase();
+		var payment = String(offer.paymentChain || SWAP.DEFAULT_PAYMENT_CHAIN).toUpperCase();
+		var assetAmount = parseFloat(offer.give || offer.assetAmount || 0);
+		var paymentAmount = parseFloat(offer.want || offer.paymentAmount || 0);
+		if (!(assetAmount > 0 && paymentAmount > 0) || asset === payment) return null;
+		var market = canonicalMarketKey(asset, payment);
+		var parts = market.split('/');
+		var forward = asset === parts[0];
+		var baseAmount = forward ? assetAmount : paymentAmount;
+		var quoteAmount = forward ? paymentAmount : assetAmount;
+		var originalSide = offer.side === 'buy' ? 'bid' : 'ask';
+		return {
+			market: market,
+			base: parts[0],
+			quote: parts[1],
+			baseAmount: baseAmount,
+			quoteAmount: quoteAmount,
+			price: (quoteAmount / baseAmount).toFixed(8),
+			side: forward ? originalSide : (originalSide === 'bid' ? 'ask' : 'bid')
+		};
+	}
+
 	function chainSettingsHtml(currentCfg) {
 		var codes = chainCodes(), html = [];
 		for (var i = 0; i < codes.length; i++) {
@@ -118,7 +154,7 @@ $(function () {
 		'</div>',
 		'</div>',
 		'<div id="otcLotSummary" class="otc-lots-summary"></div>',
-		'<table class="table otc-session-table otc-lots-tbl"><thead><tr><th>Counterparty</th><th class="otc-num js-asset-unit">ROD</th><th class="otc-num js-payment-unit">LTC</th><th>Settlement</th><th></th></tr></thead><tbody id="otcBookDetailBody"></tbody></table>',
+		'<table class="table otc-session-table otc-lots-tbl"><thead><tr><th>Counterparty</th><th class="otc-num" id="otcLotAssetUnit">ROD</th><th class="otc-num" id="otcLotPaymentUnit">LTC</th><th>Settlement</th><th></th></tr></thead><tbody id="otcBookDetailBody"></tbody></table>',
 		'</div>',
 		/* Own orders: hidden from the takeable book, managed here */
 		'<div style="margin-top:14px">',
@@ -162,7 +198,9 @@ $(function () {
 		'<h4>Create order</h4>',
 		'<p class="text-muted" style="font-size:12px;margin-top:0">Post an open <b>order</b> with your terms. To <b>take</b> an existing order and start a swap, use the <b>Dashboard</b> tab.</p>',
 		'<div class="row"><div class="col-md-6">',
-		'<label>Asset chain</label><select id="nsAssetChain" class="form-control">' + chainOptionsHtml('ROD') + '</select>',
+		'<label>Asset chain <small class="text-muted">(active website coin)</small></label><input id="nsAssetChain" class="form-control otc-asset-locked" value="ROD" readonly aria-readonly="true">',
+		'<p id="nsAssetHint" class="text-muted" style="font-size:11px;margin:4px 0 0">Change this coin from the Coins menu or Chain Info page.</p>',
+		'<div id="nsAssetUnsupported" class="alert alert-warning" style="display:none;margin-top:8px"></div>',
 		'<label>Payment chain</label><select id="nsPaymentChain" class="form-control">' + chainOptionsHtml('LTC') + '</select>',
 		'<p id="nsAltHint" class="text-muted" style="font-size:11px;margin:4px 0 0"></p>',
 		'<label>Your role</label><select id="nsRole" class="form-control"><option value="seller">I sell the asset coin</option><option value="buyer">I buy the asset coin</option></select>',
@@ -385,12 +423,20 @@ $(function () {
 				}
 			} catch (npubErr) { npub = ''; }
 			walletId.npub = npub;
-			var okHtml = 'Wallet: <code>' + esc(walletId.address) + '</code>';
+			var visibleIdentity = walletId.activeAddress || walletId.address;
+			var visibleChain = walletId.activeChain || activeSiteCoin();
+			var okHtml = esc(visibleChain) + ' wallet: <code>' + esc(visibleIdentity) + '</code>';
+			if (walletId.rodAddress && walletId.rodAddress !== visibleIdentity) {
+				okHtml += ' &nbsp;·&nbsp; ROD control identity: <code>' + esc(walletId.rodAddress) + '</code>';
+			}
 			if (npub) {
 				okHtml += ' &nbsp;·&nbsp; Nostr: <code title="' + esc(npub) + '">' + esc(npub) + '</code>';
 			}
 			$('#otcWalletOk').html(okHtml).show();
-			$('#nsMyAddr').val(walletId.address);
+			/* This read-only field follows the website-wide active coin. Protocol
+			   ownership continues to use walletId.rodAddress internally because ROD
+			   remains the order/control plane. */
+			$('#nsMyAddr').val(visibleIdentity);
 			$('#nsMyXpub').val(swapAcct.xpub);
 			return true;
 		} catch (e) {
@@ -606,26 +652,21 @@ $(function () {
 			});
 			/* Chain filter */
 			var chainFilter = $('#otcBookChainFilter').val() || '';
-			if (chainFilter) activeOffers = activeOffers.filter(function (o) { return o.pair === chainFilter; });
+			if (chainFilter) activeOffers = activeOffers.filter(function (o) { var view = marketView(o); return view && view.market === chainFilter; });
 			allOffers = activeOffers;
 			renderMyOrders(ownOffers, chainHeight);
-			/* Group by price for ask/bid */
+			/* Canonical market presentation: A/B and B/A are one market. The
+			   protocol terms remain directional; only the orderbook view normalizes
+			   price, base volume and side into the canonical alphabetic market. */
 			var asks = {}, bids = {};
 			activeOffers.forEach(function (o) {
-				var rod = parseFloat(o.give || o.assetAmount || 0), alt = parseFloat(o.want || o.paymentAmount || 0);
-				if (rod <= 0 || alt <= 0) return;
-				/* Key on the COUNTER CHAIN as well as the price. "5.0" DOGE per
-				   ROD and "5.0" Payment per asset are unrelated prices for unrelated
-				   assets; merging them would sum their volumes into one row and
-				   let a user take a swap in an asset they did not choose. */
-				var asset = o.assetChain || SWAP.DEFAULT_ASSET_CHAIN;
-				var chain = o.paymentChain || SWAP.DEFAULT_PAYMENT_CHAIN;
-				var pair = asset + '/' + chain;
-				var price = (alt / rod).toFixed(8);
-				var key = pair + '@' + price;
-				var side = (o.side === 'buy') ? bids : asks;
-				if (!side[key]) side[key] = { vol: 0, offers: [], price: price, asset: asset, chain: chain, pair: pair };
-				side[key].vol += rod;
+				var view = marketView(o);
+				if (!view) return;
+				o._marketView = view;
+				var key = view.market + '@' + view.price;
+				var side = view.side === 'bid' ? bids : asks;
+				if (!side[key]) side[key] = { vol: 0, offers: [], price: view.price, asset: view.base, chain: view.quote, pair: view.market };
+				side[key].vol += view.baseAmount;
 				side[key].offers.push(o);
 			});
 			renderBookSide('#otcAsks', asks, 'ask');
@@ -634,7 +675,7 @@ $(function () {
 			   produces a number that describes no tradable market at all — the
 			   two legs are unrelated assets. Quote the chain the user is
 			   actually looking at and label it. */
-			var quotePair = $('#otcBookChainFilter').val() || (selectedAssetChain() + '/' + selectedPaymentChain());
+			var quotePair = $('#otcBookChainFilter').val() || canonicalMarketKey(selectedAssetChain(), selectedPaymentChain());
 			var quoteParts = quotePair.split('/'), quoteAsset = quoteParts[0], quoteChain = quoteParts[1];
 			var priceList = function (book) {
 				var out = [];
@@ -752,7 +793,7 @@ $(function () {
 	   book otherwise has no reference point at all: a price is only meaningful
 	   against something that actually traded. */
 	function renderLastTraded() {
-		var quotePair = $('#otcBookChainFilter').val() || (selectedAssetChain() + '/' + selectedPaymentChain());
+		var quotePair = $('#otcBookChainFilter').val() || canonicalMarketKey(selectedAssetChain(), selectedPaymentChain());
 		var quoteParts = quotePair.split('/');
 		var quoteChain = quoteParts.length === 2 ? quoteParts[1] : '';
 		var history = [];
@@ -760,15 +801,20 @@ $(function () {
 		for (var i = 0; i < history.length; i++) {
 			var h = history[i];
 			if (!h || h.state !== 'COMPLETE') continue;
-			var pair = h.pair || ((h.assetChain || SWAP.DEFAULT_ASSET_CHAIN) + '/' + (h.paymentChain || SWAP.DEFAULT_PAYMENT_CHAIN));
-			if (pair !== quotePair) continue;
-			var rod = parseFloat(h.assetAmount || 0), alt = parseFloat(h.paymentAmount || 0);
-			if (!(rod > 0 && alt > 0)) continue;
-			$('#otcLastTraded').html(esc((alt / rod).toFixed(8)) + ' <span style="font-size:10px;color:#7fa6ba">' + esc(quoteChain) + '</span>');
+			var view = marketView({
+				assetChain: h.assetChain || (h.pair ? String(h.pair).split('/')[0] : ''),
+				paymentChain: h.paymentChain || (h.pair ? String(h.pair).split('/')[1] : ''),
+				give: h.assetAmount,
+				want: h.paymentAmount,
+				side: 'sell'
+			});
+			if (!view || view.market !== quotePair) continue;
+			$('#otcLastTraded').html(esc(view.price) + ' <span style="font-size:10px;color:#7fa6ba">' + esc(quoteChain) + '</span>');
 			return;
 		}
 		$('#otcLastTraded').html('<span style="font-size:11px;color:#7fa6ba">no ' + esc(quoteChain) + ' swaps yet</span>');
 	}
+
 	$('#otcRefreshBook').on('click', refreshBook);
 	/* Auto-load orderbook when OTC tab is opened */
 	$('a[data-toggle="tab"][href="#otc"]').on('shown.bs.tab', function () {
@@ -785,13 +831,14 @@ $(function () {
 	/* Populate the chain filter from the chains this build can actually settle,
 	   so the book can never offer a filter for an unsupported asset. */
 	(function populateChainFilter() {
-		var codes = chainCodes();
+		var codes = chainCodes().slice().sort();
 		var $sel = $('#otcBookChainFilter');
-		codes.forEach(function (asset) {
-			codes.forEach(function (payment) {
-				if (asset !== payment) $sel.append('<option value="' + esc(asset + '/' + payment) + '">' + esc(asset + '/' + payment) + '</option>');
-			});
-		});
+		for (var i = 0; i < codes.length; i++) {
+			for (var j = i + 1; j < codes.length; j++) {
+				var market = canonicalMarketKey(codes[i], codes[j]);
+				$sel.append('<option value="' + esc(market) + '">' + esc(market) + '</option>');
+			}
+		}
 	})();
 	$(document).on('change', '#otcBookChainFilter', refreshBook);
 
@@ -831,83 +878,66 @@ $(function () {
 		var price = selectedPriceRow.price, side = selectedPriceRow.side, pair = selectedPriceRow.pair;
 		var pairParts = pair.split('/'), assetCode = pairParts[0], chainCode = pairParts[1];
 		var matching = allOffers.filter(function (o) {
-			var rod = parseFloat(o.give || o.assetAmount || 0), alt = parseFloat(o.want || o.paymentAmount || 0);
-			if (!(rod > 0 && alt > 0)) return false;
-			if (o.pair !== pair) return false;
-			return (alt / rod).toFixed(8) === price;
+			var view = o._marketView || marketView(o);
+			if (!view) return false;
+			o._marketView = view;
+			return view.market === pair && view.side === side && view.price === price;
 		});
 
 		var wanted = parseFloat($('#otcLotAmount').val());
 		var hasWanted = isFinite(wanted) && wanted > 0;
-		matching.forEach(function (o) { o._rodSize = parseFloat(o.give || o.assetAmount || 0); });
+		matching.forEach(function (o) { o._baseSize = o._marketView.baseAmount; });
 		matching.sort(function (a, b) {
 			if (hasWanted) {
-				var aFit = a._rodSize >= wanted, bFit = b._rodSize >= wanted;
-				if (aFit !== bFit) return aFit ? -1 : 1;          /* fitting lots first */
-				if (aFit && bFit) return a._rodSize - b._rodSize;  /* smallest sufficient */
-				return b._rodSize - a._rodSize;                    /* else largest first */
+				var aFit = a._baseSize >= wanted, bFit = b._baseSize >= wanted;
+				if (aFit !== bFit) return aFit ? -1 : 1;
+				if (aFit && bFit) return a._baseSize - b._baseSize;
+				return b._baseSize - a._baseSize;
 			}
-			return b._rodSize - a._rodSize;
+			return b._baseSize - a._baseSize;
 		});
 
-		$('#otcBookDetailTitle').text((side === 'ask' ? 'Sell' : 'Buy') + ' lots at ' + price + ' ' + chainCode + ' per ' + assetCode);
+		$('#otcBookDetailTitle').text((side === 'ask' ? 'Sell' : 'Buy') + ' ' + assetCode + ' lots at ' + price + ' ' + chainCode + ' per ' + assetCode);
+		$('#otcLotAssetUnit').text(assetCode);
+		$('#otcLotPaymentUnit').text(chainCode);
+		$('.otc-lots-unit').text(assetCode);
 
 		var actionable = function (o) { return !!(o.sellerSwapXpub || o.buyerSwapXpub); };
-		var fitting = (hasWanted ? matching.filter(function (o) { return o._rodSize >= wanted; }) : matching.slice())
-			.filter(actionable);
-		var totalRod = matching.reduce(function (sum, o) { return sum + o._rodSize; }, 0);
+		var fitting = (hasWanted ? matching.filter(function (o) { return o._baseSize >= wanted; }) : matching.slice()).filter(actionable);
+		var totalBase = matching.reduce(function (sum, o) { return sum + o._baseSize; }, 0);
 		if (hasWanted) {
 			$('#otcLotSummary').html(fitting.length
-				? esc(fitting.length) + ' of ' + esc(matching.length) + ' lot(s) can fill ' + esc(wanted) + ' ' + esc(assetCode) + ' · smallest sufficient is <b>' + esc(fitting[0]._rodSize) + ' ' + esc(assetCode) + '</b> (costs ' + esc((fitting[0]._rodSize * parseFloat(price)).toFixed(8)) + ' ' + esc(chainCode) + ')'
-				: '<span style="color:#f0ad4e">No single lot covers ' + esc(wanted) + ' ' + esc(assetCode) + '. Largest here is ' + esc(matching.length ? matching[0]._rodSize : 0) + ' ' + esc(assetCode) + ' — OTC lots are taken whole.</span>');
+				? esc(fitting.length) + ' of ' + esc(matching.length) + ' lot(s) can fill ' + esc(wanted) + ' ' + esc(assetCode) + ' · smallest sufficient is <b>' + esc(fitting[0]._baseSize) + ' ' + esc(assetCode) + '</b> (costs ' + esc((fitting[0]._baseSize * parseFloat(price)).toFixed(8)) + ' ' + esc(chainCode) + ')'
+				: '<span style="color:#f0ad4e">No single lot covers ' + esc(wanted) + ' ' + esc(assetCode) + '. Largest here is ' + esc(matching.length ? matching[0]._baseSize : 0) + ' ' + esc(assetCode) + ' — OTC lots are taken whole.</span>');
 		} else {
-			$('#otcLotSummary').html(esc(matching.length) + ' lot(s) · ' + esc(totalRod.toFixed(2)) + ' ' + esc(assetCode) + ' total at this price');
+			$('#otcLotSummary').html(esc(matching.length) + ' lot(s) · ' + esc(totalBase.toFixed(2)) + ' ' + esc(assetCode) + ' total at this price');
 		}
 
 		$('#otcBookDetailBody').html(matching.map(function (o) {
-			var fits = !hasWanted || o._rodSize >= wanted;
-			/* An order can be legitimately listed — it is in the name DB — and
-			   still not be actionable yet. Taking one needs the counterparty
-			   swap xpub; if the record left that to relay detail that has not
-			   arrived, the take would fail deep in the create path with
-			   "Take an order on the Dashboard first", which describes nothing
-			   the user did wrong. Say the real reason and disable the action. */
+			var view = o._marketView;
+			var fits = !hasWanted || o._baseSize >= wanted;
 			var takeXpub = o.sellerSwapXpub || o.buyerSwapXpub || '';
 			var blockedReason = '';
-			if (!takeXpub) {
-				blockedReason = o._detailMissing
-					? 'waiting for the order detail this record points at'
-					: 'this record carries no counterparty swap key';
-			}
+			if (!takeXpub) blockedReason = o._detailMissing ? 'waiting for the order detail this record points at' : 'this record carries no counterparty swap key';
 			var takeable = fits && !blockedReason;
-			/* Every order here comes from the name DB. What varies is whether its
-			   detail came in the record itself or from the anchored relay event. */
-			var detailBadge = '';
-			if (o._detailHydrated) detailBadge = ' <span class="label label-info" title="Detail resolved from the Nostr event this record anchors">detail</span>';
-			else if (o._detailMissing) detailBadge = ' <span class="label label-warning" title="The record anchors relay detail that has not arrived yet">detail pending</span>';
-
+			var detailBadge = o._detailHydrated ? ' <span class="label label-info" title="Detail resolved from the Nostr event this record anchors">detail</span>' : (o._detailMissing ? ' <span class="label label-warning" title="The record anchors relay detail that has not arrived yet">detail pending</span>' : '');
 			var clock = settlementClock(o, currentRodHeight);
 			var counterparty = o.seller || o.buyer || o._name || '—';
-			var xpub = takeXpub;
 			var created = o._createdAt ? '<div class="text-muted" style="font-size:10px">Created ' + esc(o._createdAt) + '</div>' : '';
-
 			return '<tr class="' + (takeable ? 'otc-lot-fit' : 'otc-lot-unfit') + '">' +
-				'<td><div><code style="font-size:10px">' + esc(short(counterparty)) + '</code>' + detailBadge + '</div>' +
-				created +
-				(xpub ? '<div class="text-muted" style="font-size:10px">xpub <code style="font-size:10px">' + esc(short(xpub)) + '</code></div>' : '') + '</td>' +
-				'<td class="otc-num"><b>' + esc(o.give || o.assetAmount) + '</b></td>' +
-				'<td class="otc-num">' + esc(o.want || o.paymentAmount) + ' <span style="font-size:10px;color:#7fa6ba">' + esc(o.paymentChain || SWAP.DEFAULT_PAYMENT_CHAIN) + '</span></td>' +
-				'<td>' + (clock
-					? settlementBadge(clock) + '<div class="text-muted" style="font-size:10px;margin-top:2px">block ' + esc(o._dueBlock) + ' · ' + esc(clock.slackLabel) + '</div>'
-					: '<span class="otc-clock otc-clock-warn" title="This record states no release height, so there is no settlement window to check.">no window</span>') +
+				'<td><div><code style="font-size:10px">' + esc(short(counterparty)) + '</code>' + detailBadge + '</div>' + created +
+				(takeXpub ? '<div class="text-muted" style="font-size:10px">xpub <code style="font-size:10px">' + esc(short(takeXpub)) + '</code></div>' : '') + '</td>' +
+				'<td class="otc-num"><b>' + esc(view.baseAmount.toFixed(8)) + '</b></td>' +
+				'<td class="otc-num">' + esc(view.quoteAmount.toFixed(8)) + '</td>' +
+				'<td>' + (clock ? settlementBadge(clock) + '<div class="text-muted" style="font-size:10px;margin-top:2px">block ' + esc(o._dueBlock) + ' · ' + esc(clock.slackLabel) + '</div>' : '<span class="otc-clock otc-clock-warn">no window</span>') +
 				(blockedReason ? '<div style="font-size:10px;color:#f0ad4e;margin-top:2px">Not takeable — ' + esc(blockedReason) + '</div>' : '') + '</td>' +
 				'<td><button class="btn btn-xs btn-primary otcTakeOffer"' + (takeable ? '' : ' disabled') +
-					' data-rod="' + esc(o.give || o.assetAmount) + '" data-alt="' + esc(o.want || o.paymentAmount) +
-					'" data-asset-chain="' + esc(o.assetChain || SWAP.DEFAULT_ASSET_CHAIN) +
-					'" data-chain="' + esc(o.paymentChain || SWAP.DEFAULT_PAYMENT_CHAIN) + '" data-peer="' + esc(o.seller || o.buyer || '') +
-					'" data-xpub="' + esc(xpub) + '" data-release="' + esc(o.releaseRodHeight || '') +
-					'" data-peer-payout="' + esc(o.sellerPaymentPayoutAddress || o.buyerAssetPayoutAddress || '') +
-					'" data-side="' + esc(side) + '">Take</button></td></tr>';
+				' data-rod="' + esc(o.give || o.assetAmount) + '" data-alt="' + esc(o.want || o.paymentAmount) +
+				'" data-asset-chain="' + esc(o.assetChain || SWAP.DEFAULT_ASSET_CHAIN) +
+				'" data-chain="' + esc(o.paymentChain || SWAP.DEFAULT_PAYMENT_CHAIN) + '" data-peer="' + esc(o.seller || o.buyer || '') +
+				'" data-xpub="' + esc(takeXpub) + '" data-release="' + esc(o.releaseRodHeight || '') +
+				'" data-peer-payout="' + esc(o.sellerPaymentPayoutAddress || o.buyerAssetPayoutAddress || '') +
+				'" data-side="' + esc(o.side === 'buy' ? 'bid' : 'ask') + '">Take</button></td></tr>';
 		}).join(''));
 		$('#otcBookDetail').show();
 	}
@@ -933,13 +963,34 @@ $(function () {
 		$('#otcTitleAsset').text(asset);
 		$('#otcTitlePayment').text(payment);
 	}
-	$(document).on('change', '#nsAssetChain, #nsPaymentChain', function () {
-		if (selectedAssetChain() === selectedPaymentChain()) {
-			var replacement = chainCodes().filter(function (code) { return code !== selectedAssetChain(); })[0];
-			if (replacement) $('#nsPaymentChain').val(replacement);
-		}
+
+	function syncNewSwapAsset(activeCode) {
+		var asset = String(activeCode || activeSiteCoin()).toUpperCase();
+		if (!coinjs.networks[asset]) asset = DEFAULT_ASSET_CHAIN;
+		$('#nsAssetChain').val(asset);
+		var currentPayment = $.trim($('#nsPaymentChain').val() || '');
+		var paymentCodes = chainCodes().filter(function (code) { return code !== asset; });
+		var paymentHtml = paymentCodes.map(function (code) {
+			var network = coinjs.networks[code];
+			return '<option value="' + esc(code) + '">' + esc(network.name || code) + ' (' + esc(code) + ')</option>';
+		}).join('');
+		$('#nsPaymentChain').html(paymentHtml);
+		if (paymentCodes.indexOf(currentPayment) >= 0) $('#nsPaymentChain').val(currentPayment);
+		else if (paymentCodes.length) $('#nsPaymentChain').val(paymentCodes[0]);
+		var certified = !!CHAINS.definitions[asset];
+		$('#nsAssetUnsupported').toggle(!certified).html(certified ? '' : '<b>' + esc(asset) + ' is wallet-only.</b> Choose ROD, LTC, or DOGE from Coins or Chain Info before creating a swap.');
+		$('#nsCreateOrder, #nsCreate').prop('disabled', !certified);
 		refreshChainLabels();
+	}
+
+	$(document).on('change', '#nsPaymentChain', refreshChainLabels);
+	$(document).on('spexActiveCoinChanged', function (event, code) {
+		syncNewSwapAsset(code);
+		checkWallet();
+		selectedPriceRow = null;
+		$('#otcBookDetail').hide();
 	});
+	syncNewSwapAsset(activeSiteCoin());
 	/* Chain filter also updates the title to reflect the filtered pair */
 	$(document).on('change', '#otcBookChainFilter', function () {
 		var pair = $(this).val();
@@ -966,11 +1017,10 @@ $(function () {
 		   refund block counts and payout addresses all derive from them. */
 		var offerChain = String($b.data('chain') || SWAP.DEFAULT_PAYMENT_CHAIN);
 		var offerAssetChain = String($b.data('asset-chain') || SWAP.DEFAULT_ASSET_CHAIN);
-		if ($('#nsAssetChain option[value="' + offerAssetChain + '"]').length) $('#nsAssetChain').val(offerAssetChain);
-		if ($('#nsPaymentChain option[value="' + offerChain + '"]').length) {
-			$('#nsPaymentChain').val(offerChain);
-			refreshChainLabels();
-		}
+		if (window.spexSetActiveCoin) window.spexSetActiveCoin(offerAssetChain);
+		else syncNewSwapAsset(offerAssetChain);
+		if ($('#nsPaymentChain option[value="' + offerChain + '"]').length) $('#nsPaymentChain').val(offerChain);
+		refreshChainLabels();
 		$('#nsRod').val($b.data('rod'));
 		$('#nsAlt').val($b.data('alt'));
 		$('#nsPeer').val($b.data('peer') || '');
@@ -1222,8 +1272,8 @@ $(function () {
 	}
 
 	function selectedAssetChain() {
-		var code = $.trim($('#nsAssetChain').val() || '');
-		return (code && CHAINS.definitions[code]) ? code : DEFAULT_ASSET_CHAIN;
+		var code = $.trim($('#nsAssetChain').val() || activeSiteCoin()).toUpperCase();
+		return coinjs.networks[code] ? code : DEFAULT_ASSET_CHAIN;
 	}
 
 	function selectedPaymentChain() {
@@ -2728,6 +2778,7 @@ $(function () {
 
 	/* Auto-fill release height; clear counterparty unless arrived via Take offer */
 	$('a[href="#otcNew"]').on('shown.bs.tab', function () {
+		syncNewSwapAsset(activeSiteCoin());
 		checkWallet();
 		if (!nsPrefillFromOrder) {
 			clearCounterpartyFields();
@@ -2768,6 +2819,7 @@ $(function () {
 		var paymentAmount = $.trim($('#nsAlt').val());
 		var releaseRodHeight = parseInt($('#nsRelease').val(), 10);
 		var assetChain = selectedAssetChain(), paymentChain = selectedPaymentChain();
+		if (!CHAINS.definitions[assetChain]) throw new Error(assetChain + ' is wallet-only and cannot be used as an OTC asset');
 		if (assetChain === paymentChain) throw new Error('Asset and payment chains must be different');
 		if (!assetAmount || parseFloat(assetAmount) <= 0) throw new Error('Enter a positive ' + assetChain + ' amount');
 		if (!paymentAmount || parseFloat(paymentAmount) <= 0) throw new Error('Enter a positive ' + selectedPaymentChain() + ' amount');
@@ -2910,6 +2962,7 @@ $(function () {
 			   threshold — otherwise the tx will be rejected by nodes. */
 			var assetChainCode = selectedAssetChain();
 			var paymentChainCode = selectedPaymentChain();
+			if (!CHAINS.definitions[assetChainCode]) throw new Error(assetChainCode + ' is wallet-only and cannot be used as an OTC asset');
 			if (assetChainCode === paymentChainCode) throw new Error('Asset and payment chains must be different');
 			/* Dust is per-chain, and on Dogecoin it is an ABSOLUTE amount
 			   (0.001 DOGE hard limit) rather than something derived from a fee
