@@ -165,7 +165,7 @@ Default assumptions in the shipped wallet include:
 
 1. Open the OTC section in [`index.html`](index.html).
 2. Review or adjust chain API settings for your environment.
-3. If you need local ROD Core RPC-backed name or order flows, use the optional helper described in [`tools/README.md`](tools/README.md).
+3. If you need local ROD Core RPC-backed name or order flows in the browser build, use the optional helper described in [`tools/README.md`](tools/README.md). The Electron desktop wrapper now auto-starts its bundled loopback helper for this path and pre-fills OTC RPC defaults to that local endpoint.
 
 For Windows helper usage, the checked-in executable is [`tools/rod-rpc-cors-proxy.exe`](tools/rod-rpc-cors-proxy.exe).
 

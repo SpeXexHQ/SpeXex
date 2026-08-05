@@ -1,0 +1,30 @@
+{
+  "name": "SpeXex 2.7.0-beta.0",
+  "short_name": "SpeXex",
+  "description": "SpeXex is a SpaceXpanse ROD wallet and multi-chain swap hub 2.7.0-beta.0 with ROD-governed order discovery and non-custodial settlement.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#111827",
+  "background_color": "#111827",
+  "icons": [
+    {
+      "src": "images/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "images/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "images/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

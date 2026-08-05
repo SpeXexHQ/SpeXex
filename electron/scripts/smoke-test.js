@@ -65,6 +65,22 @@ function validateResults(results) {
     fail(`Preload bridge appVersion mismatch: expected ${electronPackageJson.version}, received ${String(results.preloadBridge.appVersion)}.`);
   }
 
+  if (!results.preloadBridge.rpcProxy || results.preloadBridge.rpcProxy.available !== true) {
+    fail('Desktop RPC proxy metadata was not exposed as available.');
+  }
+
+  if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(String(results.preloadBridge.rpcProxy.url || ''))) {
+    fail(`Desktop RPC proxy URL is invalid: ${String(results.preloadBridge.rpcProxy.url)}.`);
+  }
+
+  if (!results.helperHealth || results.helperHealth.ok !== true) {
+    fail(`Desktop RPC proxy health probe failed: ${JSON.stringify(results.helperHealth || null)}.`);
+  }
+
+  if (!results.helperHealth.payload || results.helperHealth.payload.ok !== true) {
+    fail('Desktop RPC proxy health payload was missing expected ok=true state.');
+  }
+
   if (!results.rendererSecurity) {
     fail('Renderer security checks were missing from smoke-test output.');
   }
@@ -89,7 +105,7 @@ function validateResults(results) {
     fail('Renderer unexpectedly exposed global.');
   }
 
-  if (results.preloadBridge.keys.length !== 2 || results.preloadBridge.keys.includes('require') || results.preloadBridge.keys.includes('process')) {
+  if (results.preloadBridge.keys.length !== 3 || results.preloadBridge.keys.includes('require') || results.preloadBridge.keys.includes('process')) {
     fail('Preload bridge exposed unexpected keys.');
   }
 }

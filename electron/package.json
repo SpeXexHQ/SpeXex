@@ -49,6 +49,12 @@
     "extraMetadata": {
       "main": "src/main.js"
     },
+    "extraResources": [
+      {
+        "from": "../tools/rod-rpc-cors-proxy.js",
+        "to": "bin/rod-rpc-cors-proxy.js"
+      }
+    ],
     "asar": true,
     "fileAssociations": [],
     "protocols": [],

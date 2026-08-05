@@ -13,6 +13,8 @@ The format is inspired by Keep a Changelog and follows Semantic Versioning princ
 
 ### Changed
 
+- **Electron desktop builds now include and auto-start the local loopback ROD RPC proxy helper.** [`electron/package.json`](electron/package.json) bundles [`tools/rod-rpc-cors-proxy.js`](tools/rod-rpc-cors-proxy.js) into app resources, [`electron/src/main.js`](electron/src/main.js) launches it through Electron's embedded Node on a loopback-only port during app startup and stops it on quit, [`electron/src/preload.js`](electron/src/preload.js) exposes only safe helper metadata to the renderer, and [`js/otc-engine.js`](js/otc-engine.js) uses that metadata to prefill OTC RPC defaults without disabling renderer security.
+
 ## [2.7.0-beta.0] - 2026-08-04
 
 ### Added

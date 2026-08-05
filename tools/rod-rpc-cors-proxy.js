@@ -28,20 +28,23 @@ const { URL } = require('url');
 const DEFAULT_LISTEN = 18080;
 const DEFAULT_BIND = '127.0.0.1';
 const DEFAULT_TARGET = 'http://127.0.0.1:11999';
+const HEALTH_PATH = '/__health';
 
 function parseArgs(argv) {
 	const opts = {
 		listen: DEFAULT_LISTEN,
 		bind: DEFAULT_BIND,
-		target: DEFAULT_TARGET
+		target: DEFAULT_TARGET,
+		allowOrigins: []
 	};
 	for (let i = 2; i < argv.length; i++) {
 		const a = argv[i];
 		if (a === '--listen' && argv[i + 1]) opts.listen = parseInt(argv[++i], 10);
 		else if (a === '--bind' && argv[i + 1]) opts.bind = argv[++i];
 		else if (a === '--target' && argv[i + 1]) opts.target = argv[++i];
+		else if (a === '--allow-origin' && argv[i + 1]) opts.allowOrigins.push(argv[++i]);
 		else if (a === '--help' || a === '-h') {
-			console.log('Usage: rod-rpc-cors-proxy [--listen 18080] [--bind 127.0.0.1] [--target http://127.0.0.1:11999]');
+			console.log('Usage: rod-rpc-cors-proxy [--listen 18080] [--bind 127.0.0.1] [--target http://127.0.0.1:11999] [--allow-origin null]');
 			process.exit(0);
 		}
 	}
@@ -52,16 +55,32 @@ function parseArgs(argv) {
 	return opts;
 }
 
-function setCors(res, req) {
-	const origin = req.headers.origin || '*';
-	res.setHeader('Access-Control-Allow-Origin', origin);
+function normalizeAllowOrigins(allowOrigins) {
+	const normalized = {};
+	(allowOrigins || []).forEach((origin) => {
+		const value = String(origin || '').trim();
+		if (value) normalized[value] = true;
+	});
+	return normalized;
+}
+
+function setCors(res, req, corsPolicy) {
+	const origin = String(req.headers.origin || '').trim();
+	const allowedOrigins = corsPolicy && corsPolicy.allowedOrigins ? corsPolicy.allowedOrigins : null;
+	const allowAnyOrigin = !allowedOrigins || !Object.keys(allowedOrigins).length;
+	const allowOriginValue = allowAnyOrigin ? (origin || '*') : (allowedOrigins[origin] ? origin : '');
+	if (allowOriginValue) {
+		res.setHeader('Access-Control-Allow-Origin', allowOriginValue);
+	}
 	res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 	res.setHeader(
 		'Access-Control-Allow-Headers',
 		req.headers['access-control-request-headers'] || 'Content-Type, Authorization'
 	);
 	res.setHeader('Access-Control-Allow-Credentials', 'true');
-	res.setHeader('Vary', 'Origin');
+	if (!allowAnyOrigin) {
+		res.setHeader('Vary', 'Origin');
+	}
 }
 
 function hopByHop(name) {
@@ -79,7 +98,7 @@ function hopByHop(name) {
 	);
 }
 
-function proxyRequest(req, res, targetBase) {
+function proxyRequest(req, res, targetBase, corsPolicy) {
 	const chunks = [];
 	req.on('data', (c) => chunks.push(c));
 	req.on('end', () => {
@@ -88,7 +107,7 @@ function proxyRequest(req, res, targetBase) {
 		try {
 			targetUrl = new URL(req.url || '/', targetBase);
 		} catch (e) {
-			setCors(res, req);
+			setCors(res, req, corsPolicy);
 			res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
 			res.end('Bad request URL');
 			return;
@@ -128,7 +147,7 @@ function proxyRequest(req, res, targetBase) {
 					}
 					outHeaders[key] = value;
 				}
-				setCors(res, req);
+				setCors(res, req, corsPolicy);
 				const upChunks = [];
 				upRes.on('data', (c) => upChunks.push(c));
 				upRes.on('end', () => {
@@ -143,7 +162,7 @@ function proxyRequest(req, res, targetBase) {
 		upstream.on('timeout', () => {
 			upstream.destroy();
 			if (!res.headersSent) {
-				setCors(res, req);
+				setCors(res, req, corsPolicy);
 				res.writeHead(504, { 'Content-Type': 'text/plain; charset=utf-8' });
 				res.end('Upstream RPC timeout');
 			}
@@ -151,7 +170,7 @@ function proxyRequest(req, res, targetBase) {
 
 		upstream.on('error', (err) => {
 			if (!res.headersSent) {
-				setCors(res, req);
+				setCors(res, req, corsPolicy);
 				res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
 				res.end('Upstream RPC error: ' + (err && err.message ? err.message : String(err)));
 			}
@@ -162,15 +181,31 @@ function proxyRequest(req, res, targetBase) {
 
 	req.on('error', () => {
 		if (!res.headersSent) {
-			setCors(res, req);
+			setCors(res, req, corsPolicy);
 			res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
 			res.end('Request error');
 		}
 	});
 }
 
+function writeHealthResponse(res, opts, targetBase) {
+	const payload = JSON.stringify({
+		ok: true,
+		listen: opts.listen,
+		bind: opts.bind,
+		target: targetBase,
+		allowOrigins: opts.allowOrigins.slice()
+	});
+	res.writeHead(200, {
+		'Content-Type': 'application/json; charset=utf-8',
+		'Content-Length': Buffer.byteLength(payload)
+	});
+	res.end(payload);
+}
+
 function main() {
 	const opts = parseArgs(process.argv);
+	const corsPolicy = { allowedOrigins: normalizeAllowOrigins(opts.allowOrigins) };
 	let targetBase = opts.target;
 	if (!/^https?:\/\//i.test(targetBase)) {
 		targetBase = 'http://' + targetBase;
@@ -191,18 +226,23 @@ function main() {
 
 	const server = http.createServer((req, res) => {
 		if (req.method === 'OPTIONS') {
-			setCors(res, req);
+			setCors(res, req, corsPolicy);
 			res.writeHead(204);
 			res.end();
 			return;
 		}
+		if ((req.url || '').split('?')[0] === HEALTH_PATH) {
+			setCors(res, req, corsPolicy);
+			writeHealthResponse(res, opts, targetBase);
+			return;
+		}
 		if (req.method !== 'GET' && req.method !== 'POST' && req.method !== 'HEAD') {
-			setCors(res, req);
+			setCors(res, req, corsPolicy);
 			res.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
 			res.end('Method not allowed');
 			return;
 		}
-		proxyRequest(req, res, targetBase);
+		proxyRequest(req, res, targetBase, corsPolicy);
 	});
 
 	server.on('error', (err) => {

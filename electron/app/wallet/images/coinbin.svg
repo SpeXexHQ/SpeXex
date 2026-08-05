@@ -1,0 +1,7 @@
+﻿<?xml version=1.0 encoding=UTF-8?>
+<svg xmlns=http://www.w3.org/2000/svg width=512 height=512 viewBox=0 0 512 512 role=img aria-label=SpaceXpanse logo>
+  <rect width=512 height=512 rx=64 fill=#0b1220/>
+  <circle cx=256 cy=256 r=180 fill=#f5b233/>
+  <text x=256 y=288 text-anchor=middle font-family=Arial, Helvetica, sans-serif font-size=120 font-weight=700 fill=#0b1220>Ɍ</text>
+  <text x=256 y=420 text-anchor=middle font-family=Arial, Helvetica, sans-serif font-size=40 font-weight=700 fill=#ffffff>SpaceXpanse</text>
+</svg>
