@@ -22,8 +22,8 @@
 
 	var BECH32_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 
-	/* A chain has one profile. `swap.status` is a certification state, not a
-	   different chain type or protocol role. A certified chain can occupy
+	/* A chain has one profile. `swap.status` is an attestation state, not a
+	   different chain type or protocol role. An attested chain can occupy
 	   either side of a swap. */
 	var PROFILES = {
 		ROD: {
@@ -50,7 +50,7 @@
 			},
 			api: { type: 'rod', base: 'https://api.spacexpanse.org:1234', operator: 'spexex' },
 			swap: {
-				status: 'certified',
+				status: 'attested',
 				transactionModel: 'bitcoin-utxo',
 				curve: 'secp256k1',
 				signature: 'ecdsa',
@@ -71,7 +71,7 @@
 					dustSurchargeSats: 0,
 					changeThresholdSats: 546
 				},
-				certification: {
+				attestation: {
 					testAmount: '100.00000000',
 					p2pkhVector: 'RKxTdfmtxtfLDKZBgx6SvNkBtNu9jRYnLh',
 					p2sh2of2Vector: 'XD5dhagVPqXzKE7ud5jPWpFAgjV9NeWaNY'
@@ -101,7 +101,7 @@
 			},
 			api: { type: 'esplora', base: 'https://litecoinspace.org/api', operator: 'community' },
 			swap: {
-				status: 'certified',
+				status: 'attested',
 				transactionModel: 'bitcoin-utxo',
 				curve: 'secp256k1',
 				signature: 'ecdsa',
@@ -124,7 +124,7 @@
 				},
 				/* This fixture deliberately stays below the historical
 				   satoshi/coin ambiguity threshold covered by the e2e suite. */
-				certification: {
+				attestation: {
 					testAmount: '0.05000000',
 					p2pkhVector: 'LVuDpNCSSj6pQ7t9Pv6d6sUkLKoqDEVUnJ',
 					p2sh2of2Vector: 'M9dZ5sEHeKx5sPdk1bQRPgSVx83ZhNrdm6'
@@ -156,7 +156,7 @@
 			},
 			api: { type: 'blockcypher', base: 'https://api.blockcypher.com/v1/doge/main', operator: 'community' },
 			swap: {
-				status: 'certified',
+				status: 'attested',
 				transactionModel: 'bitcoin-utxo',
 				curve: 'secp256k1',
 				signature: 'ecdsa',
@@ -177,7 +177,7 @@
 					dustSurchargeSats: 1000000,
 					changeThresholdSats: 3000000
 				},
-				certification: {
+				attestation: {
 					testAmount: '500.00000000',
 					p2pkhVector: 'DFpN6QqFfUm3gKNaxN6tNcab1FArL9cZLE',
 					p2sh2of2Vector: '9tAfWptDmGyYyFjKKr5VpApUKzq9hFpBJ1'
@@ -323,16 +323,16 @@
 			code + ' API profile is incomplete');
 		requireValue(profile.api.operator === 'spexex' || profile.api.operator === 'community',
 			code + ' API operator must be spexex or community');
-		requireValue(profile.swap && (profile.swap.status === 'certified' || profile.swap.status === 'wallet-only'),
-			code + ' swap status must be certified or wallet-only');
+		requireValue(profile.swap && ((profile.swap.status === 'attested' || profile.swap.status === 'certified') || profile.swap.status === 'wallet-only'),
+			code + ' swap status must be attested/certified or wallet-only');
 
-		if(profile.swap.status !== 'certified') return;
+		if(profile.swap.status !== 'attested' && profile.swap.status !== 'certified') return;
 		var swap = profile.swap;
 		requireValue(swap.transactionModel === 'bitcoin-utxo', code + ' is not a Bitcoin-style UTXO profile');
 		requireValue(swap.curve === 'secp256k1' && swap.signature === 'ecdsa', code + ' signature scheme is incompatible');
 		requireValue(swap.transactionFormat === 'bitcoin' && swap.escrow === 'p2sh-2of2', code + ' escrow format is incompatible');
-		requireValue(swap.sighash === 'legacy-all', code + ' sighash adapter is not certified');
-		requireValue(swap.timelock === 'nlocktime-height', code + ' absolute-height refund support is not certified');
+		requireValue(swap.sighash === 'legacy-all', code + ' sighash adapter is not attested');
+		requireValue(swap.timelock === 'nlocktime-height', code + ' absolute-height refund support is not attested');
 		requireValue(swap.decimals === 8, code + ' must use eight base-unit decimals in the current engine');
 		requireValue(positiveInteger(swap.blockSeconds), code + ' target block time is invalid');
 		requireValue(swap.refundBlocks && positiveInteger(swap.refundBlocks.asset) && positiveInteger(swap.refundBlocks.payment),
@@ -349,11 +349,11 @@
 		});
 		requireValue(policy.hardDustSats > 0 && policy.changeThresholdSats >= policy.hardDustSats,
 			code + ' dust/change policy is unsafe');
-		requireValue(swap.certification && validDecimal(swap.certification.testAmount, 8),
-			code + ' certification testAmount is missing');
-		requireValue(typeof swap.certification.p2pkhVector === 'string' && swap.certification.p2pkhVector.length >= 26,
+		requireValue((swap.attestation || swap.certification) && validDecimal((swap.attestation || swap.certification).testAmount, 8),
+			code + ' attestation testAmount is missing');
+		requireValue(typeof (swap.attestation || swap.certification).p2pkhVector === 'string' && (swap.attestation || swap.certification).p2pkhVector.length >= 26,
 			code + ' independent P2PKH vector is missing');
-		requireValue(typeof swap.certification.p2sh2of2Vector === 'string' && swap.certification.p2sh2of2Vector.length >= 26,
+		requireValue(typeof (swap.attestation || swap.certification).p2sh2of2Vector === 'string' && (swap.attestation || swap.certification).p2sh2of2Vector.length >= 26,
 			code + ' independent P2SH 2-of-2 vector is missing');
 	}
 
@@ -363,14 +363,16 @@
 		requireValue(codes.length > 0, 'no chain profiles');
 		codes.forEach(function(code){ validateProfile(code, stored[code]); });
 
-		/* A certified profile is exposed on either side of every pair. Validate
-		   that its shipped role defaults are safe against every other certified
+		/* An attested profile is exposed on either side of every pair. Validate
+		   that its shipped role defaults are safe against every other attested
 		   profile now, rather than allowing an apparently supported pair to fail
 		   only when a user creates it. This mirrors the runtime's 30-minute (or
 		   larger confirmation-window) action margin. */
-		var certifiedCodes = codes.filter(function(code){ return stored[code].swap.status === 'certified'; });
-		certifiedCodes.forEach(function(assetCode){
-			certifiedCodes.forEach(function(paymentCode){
+		var attestedCodes = codes.filter(function(code){
+			return stored[code].swap.status === 'attested' || stored[code].swap.status === 'certified';
+		});
+		attestedCodes.forEach(function(assetCode){
+			attestedCodes.forEach(function(paymentCode){
 				if(assetCode === paymentCode) return;
 				var asset = stored[assetCode].swap;
 				var payment = stored[paymentCode].swap;
@@ -393,7 +395,7 @@
 		}
 
 		function swapCodes(){
-			return certifiedCodes.slice(0);
+			return attestedCodes.slice(0);
 		}
 
 		function canonicalMarketKey(firstCode, secondCode){
@@ -411,22 +413,22 @@
 			return {
 				code: normalized,
 				operator: operator,
-				status: operator === 'spexex' ? 'verified-hosted' : 'community-run',
-				label: operator === 'spexex' ? 'Verified route · SpeXex-hosted' : 'Community-run route · external server'
+				status: operator === 'spexex' ? 'attested-hosted' : 'community-run',
+				label: operator === 'spexex' ? 'Attested route · SpeXex-hosted' : 'Community-run route · external server'
 			};
 		}
 
-		function verifiedRoutes(code){
+		function attestedRoutes(code){
 			var normalized = String(code || '').toUpperCase();
 			if(!stored[normalized]) throw new Error('Unknown chain profile: ' + normalized);
-			if(stored[normalized].swap.status !== 'certified') return [];
-			return certifiedCodes.filter(function(other){ return other !== normalized; }).map(function(other){
+			if(stored[normalized].swap.status !== 'attested' && stored[normalized].swap.status !== 'certified') return [];
+			return attestedCodes.filter(function(other){ return other !== normalized; }).map(function(other){
 				var market = canonicalMarketKey(normalized, other);
 				var parts = market.split('/');
 				return {
 					market: market,
 					routes: [normalized + '/' + other, other + '/' + normalized],
-					status: 'verified',
+					status: 'attested',
 					legs: [routeStatusForChain(parts[0]), routeStatusForChain(parts[1])]
 				};
 			});
@@ -498,7 +500,8 @@
 			profiles: function(){ return clone(stored); },
 			canonicalMarketKey: canonicalMarketKey,
 			routeStatusForChain: routeStatusForChain,
-			verifiedRoutes: verifiedRoutes,
+			attestedRoutes: attestedRoutes,
+			verifiedRoutes: attestedRoutes,
 			walletNetworks: walletNetworks,
 			swapDefinitions: swapDefinitions,
 			swapPolicies: swapPolicies,

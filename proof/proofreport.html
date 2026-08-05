@@ -54,7 +54,7 @@
   <h1>ROD atomic swap — full proof matrix</h1>
   <p class="sub">Generated from harness runs of the unmodified wallet in headless Chromium.
      Every broadcast below was re-parsed with bitcoinjs-lib, the correct sighash recomputed
-     (legacy for LTC / DOGE / BTC; BIP-143 fork-id for BCH), and each signature re-verified
+     (legacy for LTC / DOGE / BTC; BIP-143 fork-id for BCH), and each signature re-attested
      with noble secp256k1 — independently of the wallet's own code.</p>
 
   <div class="cards">
@@ -121,7 +121,7 @@
         </li>
         <li class="ok">
           <span class="mark">✓</span>
-          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures</span>
+          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures</span>
           
         </li>
         <li class="ok">
@@ -162,7 +162,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">LTC claim tx (2-of-2 P2SH, completed adaptor sig) broadcast &amp; independently validated</span>
-          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 1000 sats over 304 bytes (3.29 sat/B)</span>
+          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 1000 sats over 304 bytes (3.29 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -172,7 +172,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">ROD claim tx (2-of-2 P2SH, completed adaptor sig) broadcast &amp; independently validated</span>
-          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
+          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -235,7 +235,7 @@
     <tr class="">
       <td><span class="tag">ROD</span></td>
       <td class="mono small">73d0820cc76841620457b0ae5ac6e21d71f75efb43ff1d587bb4ac83a549207a</td>
-      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
+      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001cfe303d96229a814418609e8dcfacfcc77c5446f65edc1aef92e2bc71b5456df00000000da0047304402205645ee786a0b30b89b6f4cc7aeed91d26b76d0eeb3e9e7a4c775c53797483d10…</td>
     </tr>
           
@@ -248,7 +248,7 @@
     <tr class="">
       <td><span class="tag">LTC</span></td>
       <td class="mono small">7f82d36610223d57bfe609ed12d0080f877c1374a12b93f0acdd37e3d4674dce</td>
-      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 1000 sats over 304 bytes (3.29 sat/B)</div></td>
+      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 1000 sats over 304 bytes (3.29 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001e24d4dca20eeba44a26465078ab6bf08b608f571dc89f8219c01af2c23b52b4600000000db00483045022100e9cc519a7e17dfad6b6e0091db6f771ba44cfae986679cf68166bfe48d7370…</td>
     </tr>
         </tbody>
@@ -314,7 +314,7 @@
         </li>
         <li class="ok">
           <span class="mark">✓</span>
-          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures</span>
+          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures</span>
           
         </li>
         <li class="ok">
@@ -345,7 +345,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">pre-signed ROD refund broadcast &amp; independently validated (locktime + 2-of-2 sigs)</span>
-          <span class="detail">locktime 500030 satisfied at height 500035 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
+          <span class="detail">locktime 500030 satisfied at height 500035 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -388,7 +388,7 @@
     <tr class="">
       <td><span class="tag">ROD</span></td>
       <td class="mono small">70938bf5c01ec63326d8fa88acbed0264fd8cfddef5091b3c048622727659d3d</td>
-      <td class="small"><div>locktime 500030 satisfied at height 500035</div><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
+      <td class="small"><div>locktime 500030 satisfied at height 500035</div><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001d12e1e4e9dc07eb953a86b86c8a74ed67df555edba6b225c71a473b2023ec72200000000da0047304402201915bf9e0af68d1954c30cedcc05edfad8545d86949d530c6f8371fd1ef86019…</td>
     </tr>
           
@@ -455,7 +455,7 @@
         </li>
         <li class="ok">
           <span class="mark">✓</span>
-          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures</span>
+          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures</span>
           
         </li>
         <li class="ok">
@@ -491,7 +491,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">pre-signed LTC refund broadcast &amp; independently validated (locktime + 2-of-2 sigs + LTC policy)</span>
-          <span class="detail">locktime 500040 satisfied at height 500045 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 1000 sats over 303 bytes (3.30 sat/B)</span>
+          <span class="detail">locktime 500040 satisfied at height 500045 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 1000 sats over 303 bytes (3.30 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -541,7 +541,7 @@
     <tr class="">
       <td><span class="tag">LTC</span></td>
       <td class="mono small">ca7cb3e29f75df9d69530df22c765c1f6f2b681ed13e8f32a9988296df10dbe5</td>
-      <td class="small"><div>locktime 500040 satisfied at height 500045</div><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 1000 sats over 303 bytes (3.30 sat/B)</div></td>
+      <td class="small"><div>locktime 500040 satisfied at height 500045</div><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 1000 sats over 303 bytes (3.30 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001f4c60c2fc7e2b0f2b67019deb32411a0caa54387d82171a144f60e66f97d94d700000000da0047304402204e2ef69c653183ebc0eaeacd6398bc35667640e73ad10f8e480d470aa3a54bfd…</td>
     </tr>
         </tbody>
@@ -607,7 +607,7 @@
         </li>
         <li class="ok">
           <span class="mark">✓</span>
-          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures</span>
+          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures</span>
           
         </li>
         <li class="ok">
@@ -648,7 +648,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">DOGE claim tx (2-of-2 P2SH, completed adaptor sig) broadcast &amp; independently validated</span>
-          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee clears -blockmintxfee (303000) — miners with default policy would include it | fee 1000000 sats over 303 bytes (3300.33 sat/B)</span>
+          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee clears -blockmintxfee (303000) — miners with default policy would include it | fee 1000000 sats over 303 bytes (3300.33 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -658,7 +658,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">ROD claim tx (2-of-2 P2SH, completed adaptor sig) broadcast &amp; independently validated</span>
-          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
+          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -721,7 +721,7 @@
     <tr class="">
       <td><span class="tag">ROD</span></td>
       <td class="mono small">03355afa5b001449faf5e3085ae26f877ef8b096963cf4f39d2cd40d10c90a4b</td>
-      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
+      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001a87cfd5b3b450ad90a7abe171f3bc84499802d7ffa533ed076cea3e32f094fcd00000000da0047304402202410ee2f189e872f5d70234cfe32e20dad71396d3c6b4065a10c3cf5116b86ac…</td>
     </tr>
           
@@ -734,7 +734,7 @@
     <tr class="">
       <td><span class="tag">DOGE</span></td>
       <td class="mono small">8f4d8dc8dc64e82c1641400811abed14975d7b19a89370f2cdcbfe706ddf0add</td>
-      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee clears -blockmintxfee (303000) — miners with default policy would include it</div><div>fee 1000000 sats over 303 bytes (3300.33 sat/B)</div></td>
+      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee clears -blockmintxfee (303000) — miners with default policy would include it</div><div>fee 1000000 sats over 303 bytes (3300.33 sat/B)</div></td>
       <td class="mono tiny wrap">01000000011836337f6840c5f0ba6a3463e0138b4d1b8c3d73663dcc1afd184b2fb893eb2300000000da00483045022100e0e2295f3fcf1268d4a6e0f19b8a642fea9bfd771cdba34fe58cd2654276c4…</td>
     </tr>
         </tbody>
@@ -800,7 +800,7 @@
         </li>
         <li class="ok">
           <span class="mark">✓</span>
-          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures</span>
+          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures</span>
           
         </li>
         <li class="ok">
@@ -831,7 +831,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">pre-signed ROD refund broadcast &amp; independently validated (locktime + 2-of-2 sigs)</span>
-          <span class="detail">locktime 500030 satisfied at height 500035 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
+          <span class="detail">locktime 500030 satisfied at height 500035 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -874,7 +874,7 @@
     <tr class="">
       <td><span class="tag">ROD</span></td>
       <td class="mono small">9652b97f72824dc13de69b94140ad001156e6d1bd7d2ef178565a0dac0b2802d</td>
-      <td class="small"><div>locktime 500030 satisfied at height 500035</div><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
+      <td class="small"><div>locktime 500030 satisfied at height 500035</div><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001bcf30314f48a4526c6373c760129832cc2a4a1ed2be7e00ec15cdf47012fb82b00000000da00483045022100a94cadf340d4af217bfc9492287c68dceedfa6c77cb00f85381f1cb8e6127c…</td>
     </tr>
           
@@ -941,7 +941,7 @@
         </li>
         <li class="ok">
           <span class="mark">✓</span>
-          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures</span>
+          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures</span>
           
         </li>
         <li class="ok">
@@ -977,7 +977,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">pre-signed DOGE refund broadcast &amp; independently validated (locktime + 2-of-2 sigs + DOGE policy)</span>
-          <span class="detail">locktime 500060 satisfied at height 500065 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee clears -blockmintxfee (304000) — miners with default policy would include it | fee 1000000 sats over 304 bytes (3289.47 sat/B)</span>
+          <span class="detail">locktime 500060 satisfied at height 500065 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee clears -blockmintxfee (304000) — miners with default policy would include it | fee 1000000 sats over 304 bytes (3289.47 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -1027,7 +1027,7 @@
     <tr class="">
       <td><span class="tag">DOGE</span></td>
       <td class="mono small">68e516b082941f6a09bceeb8baed4fef74a13e9bc789572355905625535dae90</td>
-      <td class="small"><div>locktime 500060 satisfied at height 500065</div><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee clears -blockmintxfee (304000) — miners with default policy would include it</div><div>fee 1000000 sats over 304 bytes (3289.47 sat/B)</div></td>
+      <td class="small"><div>locktime 500060 satisfied at height 500065</div><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee clears -blockmintxfee (304000) — miners with default policy would include it</div><div>fee 1000000 sats over 304 bytes (3289.47 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001a349e51a0dc4cb7b44f45233eec6555eb097471349ef856fda1d9b78d984afac00000000db004830450221008bcffaa15907a73533874ab4824e47652498f795371e8afe3a5888e396f12d…</td>
     </tr>
         </tbody>
@@ -1093,7 +1093,7 @@
         </li>
         <li class="ok">
           <span class="mark">✓</span>
-          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures</span>
+          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures</span>
           
         </li>
         <li class="ok">
@@ -1134,7 +1134,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">BTC claim tx (2-of-2 P2SH, completed adaptor sig) broadcast &amp; independently validated</span>
-          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 5000 sats over 304 bytes (16.45 sat/B)</span>
+          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 5000 sats over 304 bytes (16.45 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -1144,7 +1144,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">ROD claim tx (2-of-2 P2SH, completed adaptor sig) broadcast &amp; independently validated</span>
-          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
+          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -1207,7 +1207,7 @@
     <tr class="">
       <td><span class="tag">ROD</span></td>
       <td class="mono small">37fee887961b9f9d17659b0df885eb0c5c133c6f2bff4dfca2d5c9a27390651c</td>
-      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
+      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001c6c6311dca9a92ec5c4cdc4d72ebd6a262bc1a2da71b63a0952563e7129013f900000000da0047304402207c9f1324d6ac7b1d9960d2452132d9826dbef03a989092b83d2187d291c5c24d…</td>
     </tr>
           
@@ -1220,7 +1220,7 @@
     <tr class="">
       <td><span class="tag">BTC</span></td>
       <td class="mono small">3b6d7fa417a03ed0bfc99da9582c1a5fab62635f530185193d6db0fa111a76d9</td>
-      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 5000 sats over 304 bytes (16.45 sat/B)</div></td>
+      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 5000 sats over 304 bytes (16.45 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001e4604a4eb55f5b0bcf422a2b450a9460243313efdd02e38ecb7f5ed510a54ade00000000db00483045022100848adb17b57bfae19a00dfca373b0eb9817d02e66699b78014a00a2e084d98…</td>
     </tr>
         </tbody>
@@ -1286,7 +1286,7 @@
         </li>
         <li class="ok">
           <span class="mark">✓</span>
-          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures</span>
+          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures</span>
           
         </li>
         <li class="ok">
@@ -1317,7 +1317,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">pre-signed ROD refund broadcast &amp; independently validated (locktime + 2-of-2 sigs)</span>
-          <span class="detail">locktime 500030 satisfied at height 500035 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 71000 sats over 302 bytes (235.10 sat/B)</span>
+          <span class="detail">locktime 500030 satisfied at height 500035 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 71000 sats over 302 bytes (235.10 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -1360,7 +1360,7 @@
     <tr class="">
       <td><span class="tag">ROD</span></td>
       <td class="mono small">5d026b9e815529c4c0c56def8ad3ad426baa1901e561850826b0554fefcfcd14</td>
-      <td class="small"><div>locktime 500030 satisfied at height 500035</div><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 71000 sats over 302 bytes (235.10 sat/B)</div></td>
+      <td class="small"><div>locktime 500030 satisfied at height 500035</div><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 71000 sats over 302 bytes (235.10 sat/B)</div></td>
       <td class="mono tiny wrap">01000000010e6e0b62a4aa8eb13c731015352a4723a77e3dcbf843066c97357bbb8a7e9da400000000d90047304402203641efd45ff0216140db00a7e0b616dc543615ba6969819500d83b074ae169b0…</td>
     </tr>
           
@@ -1427,7 +1427,7 @@
         </li>
         <li class="ok">
           <span class="mark">✓</span>
-          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures</span>
+          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures</span>
           
         </li>
         <li class="ok">
@@ -1463,7 +1463,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">pre-signed BTC refund broadcast &amp; independently validated (locktime + 2-of-2 sigs + BTC policy)</span>
-          <span class="detail">locktime 500006 satisfied at height 500011 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 5000 sats over 302 bytes (16.56 sat/B)</span>
+          <span class="detail">locktime 500006 satisfied at height 500011 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 5000 sats over 302 bytes (16.56 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -1513,7 +1513,7 @@
     <tr class="">
       <td><span class="tag">BTC</span></td>
       <td class="mono small">08e589f8149cc201d1f70c326d26fc5bad0293a7354acca370fdfdf7a582bbe6</td>
-      <td class="small"><div>locktime 500006 satisfied at height 500011</div><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 5000 sats over 302 bytes (16.56 sat/B)</div></td>
+      <td class="small"><div>locktime 500006 satisfied at height 500011</div><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 5000 sats over 302 bytes (16.56 sat/B)</div></td>
       <td class="mono tiny wrap">01000000015b4b4839747ee6eb70a5f3f4e19ed8ef80c4155db4776057a0637b603deb745d00000000d90047304402206f4b19a525ea0ac336b5929b5ef0811e4341acc0ff810403a27fc80e3002ad5d…</td>
     </tr>
         </tbody>
@@ -1579,7 +1579,7 @@
         </li>
         <li class="ok">
           <span class="mark">✓</span>
-          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures</span>
+          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures</span>
           
         </li>
         <li class="ok">
@@ -1620,7 +1620,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">BCH claim tx (2-of-2 P2SH, completed adaptor sig) broadcast &amp; independently validated</span>
-          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 1000 sats over 302 bytes (3.31 sat/B)</span>
+          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 1000 sats over 302 bytes (3.31 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -1630,7 +1630,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">ROD claim tx (2-of-2 P2SH, completed adaptor sig) broadcast &amp; independently validated</span>
-          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 71000 sats over 302 bytes (235.10 sat/B)</span>
+          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 71000 sats over 302 bytes (235.10 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -1693,7 +1693,7 @@
     <tr class="">
       <td><span class="tag">ROD</span></td>
       <td class="mono small">c11e2fa96a3685c3863fe466a8768a94fffad6118ef1ccc291041751f027b123</td>
-      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 71000 sats over 302 bytes (235.10 sat/B)</div></td>
+      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 71000 sats over 302 bytes (235.10 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001e7d2c4466927119d5624e32e648813284bfbc4324566f2848cc2381f68f9ab5700000000d90047304402207b3d08de40107da1e0b1d999ad0c0b920befad47b64530fc3014dbe62c2a4312…</td>
     </tr>
           
@@ -1706,7 +1706,7 @@
     <tr class="">
       <td><span class="tag">BCH</span></td>
       <td class="mono small">21b5f4585b85774dc111f79e623f29b54b036dd6ef0431cc93a915f59ac245e2</td>
-      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 1000 sats over 302 bytes (3.31 sat/B)</div></td>
+      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 1000 sats over 302 bytes (3.31 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001f20ed9b73a066a0776e9d82888ad16e456157bf397bb204955ac90528b86fce600000000d90047304402203adf5e907634f182d8b106d45cba0cc442b6542374cd6ea5ff34d3787d4886ce…</td>
     </tr>
         </tbody>
@@ -1772,7 +1772,7 @@
         </li>
         <li class="ok">
           <span class="mark">✓</span>
-          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures</span>
+          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures</span>
           
         </li>
         <li class="ok">
@@ -1803,7 +1803,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">pre-signed ROD refund broadcast &amp; independently validated (locktime + 2-of-2 sigs)</span>
-          <span class="detail">locktime 500030 satisfied at height 500035 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 71000 sats over 302 bytes (235.10 sat/B)</span>
+          <span class="detail">locktime 500030 satisfied at height 500035 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 71000 sats over 302 bytes (235.10 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -1846,7 +1846,7 @@
     <tr class="">
       <td><span class="tag">ROD</span></td>
       <td class="mono small">ea4e0f0575be7e81aced012146441d807bcd3e41e1cb3dbee968eed656ecdb80</td>
-      <td class="small"><div>locktime 500030 satisfied at height 500035</div><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 71000 sats over 302 bytes (235.10 sat/B)</div></td>
+      <td class="small"><div>locktime 500030 satisfied at height 500035</div><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 71000 sats over 302 bytes (235.10 sat/B)</div></td>
       <td class="mono tiny wrap">010000000122f53c5fc879364f706fee61bca1f7fc9cebe151231c645b8c08bbff7d35a78500000000d9004730440220621182efb99fe616e792fe369e8dd00b731e9ac5292d7321087daa4e55b376cb…</td>
     </tr>
           
@@ -1913,7 +1913,7 @@
         </li>
         <li class="ok">
           <span class="mark">✓</span>
-          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures</span>
+          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures</span>
           
         </li>
         <li class="ok">
@@ -1949,7 +1949,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">pre-signed BCH refund broadcast &amp; independently validated (locktime + 2-of-2 sigs + BCH policy)</span>
-          <span class="detail">locktime 500006 satisfied at height 500011 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 1000 sats over 303 bytes (3.30 sat/B)</span>
+          <span class="detail">locktime 500006 satisfied at height 500011 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 1000 sats over 303 bytes (3.30 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -1999,7 +1999,7 @@
     <tr class="">
       <td><span class="tag">BCH</span></td>
       <td class="mono small">c9ca64686a0f18a377d6b0912f521fd6fb7d806870f39e811c3316bacf361d94</td>
-      <td class="small"><div>locktime 500006 satisfied at height 500011</div><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 1000 sats over 303 bytes (3.30 sat/B)</div></td>
+      <td class="small"><div>locktime 500006 satisfied at height 500011</div><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 1000 sats over 303 bytes (3.30 sat/B)</div></td>
       <td class="mono tiny wrap">01000000010d5274b701a0435cb45ce64fba3d0b0199749eca7c34bae44ab7fb9df018ca2100000000da004730440220673620ceb2aa896668c7a3169b6a95b288ec5f57b1bdb81fd35d0d7db47c49ed…</td>
     </tr>
         </tbody>
@@ -2065,7 +2065,7 @@
         </li>
         <li class="ok">
           <span class="mark">✓</span>
-          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures</span>
+          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures</span>
           
         </li>
         <li class="ok">
@@ -2111,7 +2111,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">LTC claim tx (2-of-2 P2SH, completed adaptor sig) broadcast &amp; independently validated</span>
-          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 1000 sats over 303 bytes (3.30 sat/B)</span>
+          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 1000 sats over 303 bytes (3.30 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -2121,7 +2121,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">ROD claim tx (2-of-2 P2SH, completed adaptor sig) broadcast &amp; independently validated</span>
-          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
+          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -2184,7 +2184,7 @@
     <tr class="">
       <td><span class="tag">ROD</span></td>
       <td class="mono small">78ae838ca8b860ff5c6ae2cd6b3d39f480d2341bfad0e6cec31c8586c436281a</td>
-      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
+      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
       <td class="mono tiny wrap">01000000012fca7666a586c680eb41abc4b72cfbf869719c4c6fa318d98d84564e07aee04d00000000da00483045022100c0aa4d92985ae6420834fe581f90ea8dba628660a20ae6cd7323fb1ce1583e…</td>
     </tr>
           
@@ -2197,7 +2197,7 @@
     <tr class="">
       <td><span class="tag">LTC</span></td>
       <td class="mono small">c9db53dd2f299f06f18f5994d3ba179b54d4e18b01061184588761c83e2bfc83</td>
-      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 1000 sats over 303 bytes (3.30 sat/B)</div></td>
+      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 1000 sats over 303 bytes (3.30 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001d513a891631b428d4f29c003a41d901df159363e6e3a26acf2ba6ff408c7990c00000000da0047304402206fe3de492a887b4e2b978cb22d64d7279740f027a97ce9187f1448317d8bc4d1…</td>
     </tr>
         </tbody>
@@ -2263,7 +2263,7 @@
         </li>
         <li class="ok">
           <span class="mark">✓</span>
-          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures</span>
+          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures</span>
           
         </li>
         <li class="ok">
@@ -2309,7 +2309,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">DOGE claim tx (2-of-2 P2SH, completed adaptor sig) broadcast &amp; independently validated</span>
-          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee clears -blockmintxfee (303000) — miners with default policy would include it | fee 1000000 sats over 303 bytes (3300.33 sat/B)</span>
+          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee clears -blockmintxfee (303000) — miners with default policy would include it | fee 1000000 sats over 303 bytes (3300.33 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -2319,7 +2319,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">ROD claim tx (2-of-2 P2SH, completed adaptor sig) broadcast &amp; independently validated</span>
-          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
+          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -2382,7 +2382,7 @@
     <tr class="">
       <td><span class="tag">ROD</span></td>
       <td class="mono small">ffbd1f51d59fe241914466ccbe8da6664390e521f0525290d4106d224f449237</td>
-      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
+      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001005826cc6d5bbc38596da7c6340d493e31909313107ba75e1748aec7b7cc1aec00000000da00473044022062742fd6548db0b8cc5be989cf23c813ec5b14590ca1eda1bb1da259bc425f24…</td>
     </tr>
           
@@ -2395,7 +2395,7 @@
     <tr class="">
       <td><span class="tag">DOGE</span></td>
       <td class="mono small">9972debe51feffa0799acd96a64effa37b1cb583800c658e62a971b7ef988e3a</td>
-      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee clears -blockmintxfee (303000) — miners with default policy would include it</div><div>fee 1000000 sats over 303 bytes (3300.33 sat/B)</div></td>
+      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee clears -blockmintxfee (303000) — miners with default policy would include it</div><div>fee 1000000 sats over 303 bytes (3300.33 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001e61eb0bb88ef2542f5a26ddd2ccd71c1a50bf603f86718114b12bd2e8a69f35e00000000da00483045022100941dc1363874178052111b8af507fecdf3dffc41ac8e637ff342872bc51ccb…</td>
     </tr>
         </tbody>
@@ -2461,7 +2461,7 @@
         </li>
         <li class="ok">
           <span class="mark">✓</span>
-          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures</span>
+          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures</span>
           
         </li>
         <li class="ok">
@@ -2507,7 +2507,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">BTC claim tx (2-of-2 P2SH, completed adaptor sig) broadcast &amp; independently validated</span>
-          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 5000 sats over 302 bytes (16.56 sat/B)</span>
+          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 5000 sats over 302 bytes (16.56 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -2517,7 +2517,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">ROD claim tx (2-of-2 P2SH, completed adaptor sig) broadcast &amp; independently validated</span>
-          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
+          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -2580,7 +2580,7 @@
     <tr class="">
       <td><span class="tag">ROD</span></td>
       <td class="mono small">e891fa4a4c091e8f4450be8d7c87a64f3fa6e13fecaa408ba2396b27d99a06a2</td>
-      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
+      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001db0dee502d3ce9f322c791333ec996c601c3d6368fcd82fc6fb2badd44df4f4600000000da004730440220304f98a97b172eef99e3e5dab556b3ac9ce407b77c2d1fcc824504994481d998…</td>
     </tr>
           
@@ -2593,7 +2593,7 @@
     <tr class="">
       <td><span class="tag">BTC</span></td>
       <td class="mono small">c39ecda88ac99c3ef044745a763333674cc2c46ea17455af608d20b4b9bf1c35</td>
-      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 5000 sats over 302 bytes (16.56 sat/B)</div></td>
+      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 5000 sats over 302 bytes (16.56 sat/B)</div></td>
       <td class="mono tiny wrap">01000000011e0f92858a1f476886d2270496a7a2bfd3247df28c19e4bb98a6b02dc6c5338e00000000d90047304402202f58a3e380df17d3147cdf35be69807603878b5d60d8946713464815cd620d64…</td>
     </tr>
         </tbody>
@@ -2659,7 +2659,7 @@
         </li>
         <li class="ok">
           <span class="mark">✓</span>
-          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures</span>
+          <span class="what">both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures</span>
           
         </li>
         <li class="ok">
@@ -2705,7 +2705,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">BCH claim tx (2-of-2 P2SH, completed adaptor sig) broadcast &amp; independently validated</span>
-          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 1000 sats over 303 bytes (3.30 sat/B)</span>
+          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 1000 sats over 303 bytes (3.30 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -2715,7 +2715,7 @@
         <li class="ok">
           <span class="mark">✓</span>
           <span class="what">ROD claim tx (2-of-2 P2SH, completed adaptor sig) broadcast &amp; independently validated</span>
-          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
+          <span class="detail">input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 71000 sats over 303 bytes (234.32 sat/B)</span>
         </li>
         <li class="ok">
           <span class="mark">✓</span>
@@ -2778,7 +2778,7 @@
     <tr class="">
       <td><span class="tag">ROD</span></td>
       <td class="mono small">a821226bf30d30efc957bc77caeaedcbde4b43f2397de8fa6bfc46f1b0babe3e</td>
-      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
+      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 71000 sats over 303 bytes (234.32 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001e921f335e1a34edfc980c3c764557b80c03dade861e29b3da98143d29022307f00000000da00483045022100db9e8a98e8cb1095dd753be94185748fcc244fac51f75bc9e84a7f65c00f59…</td>
     </tr>
           
@@ -2791,7 +2791,7 @@
     <tr class="">
       <td><span class="tag">BCH</span></td>
       <td class="mono small">8676b4ad2343c45935bb789c8233cceb9c5ae63f405f799068f09feafb037596</td>
-      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)</div><div>fee 1000 sats over 303 bytes (3.30 sat/B)</div></td>
+      <td class="small"><div>input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)</div><div>fee 1000 sats over 303 bytes (3.30 sat/B)</div></td>
       <td class="mono tiny wrap">0100000001f5b9e5d679f3bf2f9ee6b042ee2dbf0260421d0644b4fd6fb654d0cf0c83863b00000000da00483045022100d51342e35d0a4143b1dfb35febd06bc191feb096e2cf5ceaa9f8178912003f…</td>
     </tr>
         </tbody>

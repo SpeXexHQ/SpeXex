@@ -3,7 +3,7 @@
 The harness runs the actual static wallet in isolated Chromium contexts against
 local mock settlement-chain APIs, a separate ROD control-plane API when needed,
 and a local NIP-01 relay. Production application files are not replaced by test
-doubles. The full runner discovers every ordered pair of distinct certified
+doubles. The full runner discovers every ordered pair of distinct attested
 chains from the production registry.
 
 ## Folder contents
@@ -76,5 +76,5 @@ contention rather than useful product load.
 ## Expected artifacts and usage notes
 
 - Use [`node e2e-swap-test.js`](e2e-swap-test.js:1) with environment variables for focused investigation, but do not treat a single scenario as a release substitute for [`bash run-all.sh`](run-all.sh:1).
-- Treat checked-in JSON reports as evidence artifacts, not as the authoritative source of current certification status; the current certification source of truth is the shipped registry plus the latest rerun of the harness.
+- Treat checked-in JSON reports as evidence artifacts, not as the authoritative source of current attestation status; the current attestation source of truth is the shipped registry plus the latest rerun of the harness.
 - If this folder changes, refresh [`SHA256SUMS`](../../SHA256SUMS) with [`node tests/update-checksums.js`](../update-checksums.js:1) from the repository root and rerun [`bash tests/run-fast.sh`](../run-fast.sh:1).

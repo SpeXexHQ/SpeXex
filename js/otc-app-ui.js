@@ -242,7 +242,7 @@ $(function () {
 		'<div id="otcALog" class="otc-swap-log" style="max-height:250px"></div>',
 		'<div id="otcExecution" class="otc-panel" style="margin-top:12px">',
 		'<h5>Real swap execution</h5>',
-		'<div class="alert alert-info" style="font-size:12px;margin-bottom:8px"><b>Safety:</b> funding is broadcast only after BOTH pre-signed timelocked refunds and BOTH verified adaptor signatures are in place (PREPARED). If the counterparty disappears, the automation broadcasts your refund once its lock height passes.</div>',
+		'<div class="alert alert-info" style="font-size:12px;margin-bottom:8px"><b>Safety:</b> funding is broadcast only after BOTH pre-signed timelocked refunds and BOTH attested adaptor signatures are in place (PREPARED). If the counterparty disappears, the automation broadcasts your refund once its lock height passes.</div>',
 		'<div id="otcExecStatus" style="font-size:12px;margin-top:8px"></div>',
 		'<div class="btn-toolbar" style="margin-top:10px">',
 		'<button class="btn btn-primary btn-sm otcExecBtn" data-action="accept-offer">Accept swap</button> ',
@@ -977,9 +977,9 @@ $(function () {
 		$('#nsPaymentChain').html(paymentHtml);
 		if (paymentCodes.indexOf(currentPayment) >= 0) $('#nsPaymentChain').val(currentPayment);
 		else if (paymentCodes.length) $('#nsPaymentChain').val(paymentCodes[0]);
-		var certified = !!CHAINS.definitions[asset];
-		$('#nsAssetUnsupported').toggle(!certified).html(certified ? '' : '<b>' + esc(asset) + ' is wallet-only.</b> Choose ROD, LTC, or DOGE from Coins or Chain Info before creating a swap.');
-		$('#nsCreateOrder, #nsCreate').prop('disabled', !certified);
+		var attested = !!CHAINS.definitions[asset];
+		$('#nsAssetUnsupported').toggle(!attested).html(attested ? '' : '<b>' + esc(asset) + ' is wallet-only.</b> Choose ROD, LTC, or DOGE from Coins or Chain Info before creating a swap.');
+		$('#nsCreateOrder, #nsCreate').prop('disabled', !attested);
 		refreshChainLabels();
 	}
 
@@ -1182,7 +1182,7 @@ $(function () {
 			['Planned ' + esc(assetChainOf(s)) + ' funding', s.plannedAssetFunding ? '<code style="font-size:10px;word-break:break-all">' + esc(s.plannedAssetFunding.txid) + '</code>' : '<span class="text-muted">not planned</span>'],
 			['Planned ' + esc(paymentChainOf(s)) + ' funding', s.plannedPaymentFunding ? '<code style="font-size:10px;word-break:break-all">' + esc(s.plannedPaymentFunding.txid) + '</code>' : '<span class="text-muted">not planned</span>'],
 			['Prepared', (s.localPrepared ? '<span class="label label-success">local</span>' : '<span class="label label-default">local pending</span>') + ' ' + (s.remotePrepared ? '<span class="label label-success">remote</span>' : '<span class="label label-default">remote pending</span>')],
-			['Adaptor sigs', (s.localPaymentAdaptorSignature || s.localAssetAdaptorSignature ? '<span class="label label-success">local sent</span>' : '<span class="label label-default">local pending</span>') + ' ' + (s.remotePaymentAdaptorSignature || s.remoteAssetAdaptorSignature ? '<span class="label label-success">remote verified</span>' : '<span class="label label-default">remote pending</span>')],
+			['Adaptor sigs', (s.localPaymentAdaptorSignature || s.localAssetAdaptorSignature ? '<span class="label label-success">local sent</span>' : '<span class="label label-default">local pending</span>') + ' ' + (s.remotePaymentAdaptorSignature || s.remoteAssetAdaptorSignature ? '<span class="label label-success">remote attested</span>' : '<span class="label label-default">remote pending</span>')],
 			['Terms hash', '<code style="font-size:10px">' + esc(s.terms.termsHash) + '</code>'],
 			['Child index', esc(s.childIndex)],
 			[esc(assetChainOf(s)) + ' multisig', '<code style="font-size:10px">' + esc(s.terms.assetFunding.multisigAddress) + '</code>'],

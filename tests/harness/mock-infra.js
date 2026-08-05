@@ -108,7 +108,7 @@ for (const code of CHAIN_REGISTRY.swapCodes()) {
 class MockChain {
   constructor(name) {
     this.name = name;              // 'ROD' | 'LTC' | 'DOGE'
-    if (!CHAIN_POLICY[name]) throw new Error(`No certified mock policy for chain ${name}`);
+    if (!CHAIN_POLICY[name]) throw new Error(`No attested mock policy for chain ${name}`);
     this.policy = CHAIN_POLICY[name];
     this.utxos = new Map();        // 'txid:vout' -> {txid, vout, value, script(Buffer), address}
     this.txs = new Map();          // txid -> {hex, tx, vouts:[{value, script, address, spent}]}

@@ -45,7 +45,7 @@ All 16 vectors were executed against the frozen wallet in batches of two:
 
 ```text
 exact wallet generation matches: 16/16
-wallet verification matches:      16/16
+wallet attestation matches:      16/16
 wallet completion matches:        16/16
 wallet recovery matches:          16/16
 ```

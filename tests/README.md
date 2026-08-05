@@ -59,7 +59,7 @@ bash run-all.sh
 In addition to the fast gate, this loads the unmodified `index.html` in real
 Chromium, checks browser globals and DOM wiring, installs the service worker,
 reloads the full shell offline, and runs two peers through the independently
-validated settlement matrix for every ordered pair of distinct certified
+validated settlement matrix for every ordered pair of distinct attested
 chains in the shipped OTC registry.
 
 For each current ROD/LTC/DOGE ordered pair, the matrix runs:

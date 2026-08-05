@@ -307,10 +307,11 @@
 		var registryVectorsMatch = true;
 		var failedRegistryVector = '';
 		chainsModule.codes().forEach(function(code){
-			var certification = window.spexChainRegistry.getProfile(code).swap.certification;
+			var profile = window.spexChainRegistry.getProfile(code);
+			var attestation = profile.swap.attestation || profile.swap.certification;
 			var p2pkh = chainsModule.publicKeyToAddress(code, vectorKey1, 'legacy');
 			var p2sh = chainsModule.publicKeysToMultisig(code, [vectorKey1, vectorKey2], 2).address;
-			if(p2pkh !== certification.p2pkhVector || p2sh !== certification.p2sh2of2Vector){
+			if(!attestation || p2pkh !== attestation.p2pkhVector || p2sh !== attestation.p2sh2of2Vector){
 				registryVectorsMatch = false;
 				failedRegistryVector = code;
 			}

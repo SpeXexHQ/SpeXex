@@ -3,7 +3,7 @@
 #   1. deterministic Node contract/security/release/mutation checks
 #   2. real-browser integration + offline PWA check
 #   3. independently validated settlement matrix for every ordered pair of
-#      distinct certified chains
+#      distinct attested chains
 set -u
 set -o pipefail
 cd "$(dirname "$0")"
@@ -28,7 +28,7 @@ mapfile -t SUPPORTED_SWAP_PAIRS < <(
   "$NODE_BIN" -e "const codes=require('../../js/chain-registry.js').swapCodes(); for(const asset of codes) for(const payment of codes) if(asset!==payment) console.log(asset+':'+payment)"
 )
 if [ "${#SUPPORTED_SWAP_PAIRS[@]}" -eq 0 ]; then
-  echo "chain registry must contain at least two certified chains"
+  echo "chain registry must contain at least two attested chains"
   exit 65
 fi
 

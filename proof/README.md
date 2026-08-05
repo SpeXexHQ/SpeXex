@@ -1,6 +1,6 @@
 # Proof artifacts
 
-This directory contains checked-in visual and report artifacts related to wallet and OTC verification work. The main entry point is [`proof/proofreport.html`](proof/proofreport.html), while the images capture wallet UI states observed during proof generation.
+This directory contains checked-in visual and report artifacts related to wallet and OTC attestation work. The main entry point is [`proof/proofreport.html`](proof/proofreport.html), while the images capture wallet UI states observed during proof generation.
 
 ## What is in this directory
 
@@ -15,11 +15,11 @@ This directory contains checked-in visual and report artifacts related to wallet
 
 ## Role of this folder
 
-This folder is an evidence archive, not executable runtime code and not the authoritative source of current release certification. Current release validation still comes from rerunning [`bash tests/run-fast.sh`](../tests/run-fast.sh:1) and, before release, [`bash tests/harness/run-all.sh`](../tests/harness/run-all.sh:1).
+This folder is an evidence archive, not executable runtime code and not the authoritative source of current release attestation. Current release validation still comes from rerunning [`bash tests/run-fast.sh`](../tests/run-fast.sh:1) and, before release, [`bash tests/harness/run-all.sh`](../tests/harness/run-all.sh:1).
 
 ## What the proof report proves
 
-The report title and summary state that it was generated from harness runs of the unmodified wallet in headless Chromium and that every broadcast was independently re-parsed and re-verified outside the wallet code itself in [`proof/proofreport.html`](proof/proofreport.html:54).
+The report title and summary state that it was generated from harness runs of the unmodified wallet in headless Chromium and that every broadcast was independently re-parsed and re-attested outside the wallet code itself in [`proof/proofreport.html`](proof/proofreport.html:54).
 
 At the current snapshot, the matrix records:
 
@@ -42,7 +42,7 @@ Those numbers describe this checked-in artifact only. They should be read as his
 3. The report then records whether the expected settlement or refund path completed, plus the payout or refund addresses and amounts.
 4. The screenshots in this directory provide visual evidence of the same flows from the wallet UI.
 
-The proof report itself explains the validation model in the opening summary at [`proof/proofreport.html`](proof/proofreport.html:55) and the chain-specific verification notes at [`proof/proofreport.html`](proof/proofreport.html:2804).
+The proof report itself explains the validation model in the opening summary at [`proof/proofreport.html`](proof/proofreport.html:55) and the chain-specific attestation notes at [`proof/proofreport.html`](proof/proofreport.html:2804).
 
 ## Active swap detail screenshots
 
@@ -140,7 +140,7 @@ What this image shows operationally:
 
 ## Relationship between the screenshots and the HTML report
 
-The screenshots are UI evidence, while [`proof/proofreport.html`](proof/proofreport.html) is the structured verification artifact. The screenshots show what a participant saw in the wallet. The HTML report records the machine-checked outcome, including tx validation and relay message sequencing.
+The screenshots are UI evidence, while [`proof/proofreport.html`](proof/proofreport.html) is the structured attestation artifact. The screenshots show what a participant saw in the wallet. The HTML report records the machine-checked outcome, including tx validation and relay message sequencing.
 
 If a reader wants the strongest evidence, start with [`proof/proofreport.html`](proof/proofreport.html), then use the screenshots as visual confirmation of the wallet state that the harness exercised.
 

@@ -64,12 +64,12 @@
     {
       "name": "LTC claim tx (2-of-2 P2SH) broadcast & independently validated",
       "ok": true,
-      "detail": "input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 1000 sats over 302 bytes (3.31 sat/B)"
+      "detail": "input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 1000 sats over 302 bytes (3.31 sat/B)"
     },
     {
       "name": "ROD claim tx (2-of-2 P2SH) broadcast & independently validated",
       "ok": true,
-      "detail": "input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 51900 sats over 303 bytes (171.29 sat/B)"
+      "detail": "input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 51900 sats over 303 bytes (171.29 sat/B)"
     },
     {
       "name": "bob session COMPLETE",
@@ -127,7 +127,7 @@
       "hex": "01000000018a2044a64258fcc7621c17d91936939d0e99b44e204998287f2cf27ac5e148aa00000000da00473044022076e010811c3ae5d0dc0fdb02098b10f5cedeb161aa64cbd34cd065fc024caa3b02205c9cc37d48d08096d5770086265edf28dc638089ed9fb796bad15269889acc750148304502210090306cc8455fcf0d6c40ead27c4261cc28bd8509803a83bec013175706ec630b022064272ae560da5e5d504ff88ab1bed4994053780c45a65ac8c6506636061d8e8f0147522102029484246f5a130369ed85b08adfc49cab7b7d232577e8d0a38fb154a78e2836210203a53f484f15ed30eefbe7e474631cc9d20afe3d542cf7754cced66decbeba6352aeffffffff0144190b54020000001976a91475d16e2aa067abc7accd5e9f4904fff10143a24988ac00000000",
       "valid": true,
       "details": [
-        "input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)",
+        "input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)",
         "fee 51900 sats over 303 bytes (171.29 sat/B)"
       ]
     }
@@ -147,7 +147,7 @@
       "hex": "010000000118f22a55abdf232b095d28aab101096aa336c2b5c6e5c1a077a2f01b4d4e6c5500000000d9004730440220483ef13a119f7dbb0532cffcf2293d1956d24e69c5a1721122d4493474d7d97b02207b91dbfb172fc0beab9c1b9d8442c37bcda838533da0cc9b3fb71735d434a4480147304402207b6cea3892d5771e67b7619b7ae982e93f5806bbc6af784628a287100a032b12022028793301238b1e892613b7abdbcc4b5349f6dda7888b9bbcc2df50c727686c970147522102029484246f5a130369ed85b08adfc49cab7b7d232577e8d0a38fb154a78e2836210203a53f484f15ed30eefbe7e474631cc9d20afe3d542cf7754cced66decbeba6352aeffffffff0158474c00000000001976a914fd37d7e99f1946ba280f0ac138964221a8a9265e88ac00000000",
       "valid": true,
       "details": [
-        "input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)",
+        "input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)",
         "fee 1000 sats over 302 bytes (3.31 sat/B)"
       ]
     }

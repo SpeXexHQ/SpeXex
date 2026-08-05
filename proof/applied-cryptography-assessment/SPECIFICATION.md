@@ -181,7 +181,7 @@ z = (w + c*k) mod n
 
 The proof is `(c, z)`.
 
-### 7.3 Verification
+### 7.3 Attestation
 
 Given canonical `G`, `Y`, `R'`, `R`, `c`, and `z`:
 
@@ -247,7 +247,7 @@ offset   length   field
 
 There is no algorithm identifier or version byte in the deployed format. Implementations MUST negotiate the variant out of band. A future revision MUST add explicit versioning before changing any transcript.
 
-## 10. Pre-signature verification
+## 10. Pre-signature attestation
 
 Inputs: signing public key `X`, adaptor point `Y`, message `m_bytes`, and serialized pre-signature.
 

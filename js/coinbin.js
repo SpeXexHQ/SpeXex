@@ -73,14 +73,14 @@ return typeof value === "string" && value !== "1";
 	}
 
 	/* The Coins menu is registry-driven. Adding a profile must not require a
-	   second, easily forgotten edit to index.html. Certification affects only
+	   second, easily forgotten edit to index.html. Attestation affects only
 	   grouping/copy here; every entry remains an ordinary wallet network. */
 	function renderWalletCoinMenu(){
 		var $menu = $('#walletCoinMenu');
 		if(!$menu.length) return;
 		$menu.empty();
 		var groups = [
-			{ status: 'certified', label: 'Swap certified' },
+			{ status: 'attested', label: 'Swap attested' },
 			{ status: 'wallet-only', label: 'Wallet only' }
 		];
 		for(var groupIndex = 0; groupIndex < groups.length; groupIndex++){
@@ -99,12 +99,12 @@ return typeof value === "string" && value !== "1";
 				var chainCode = groupCodes[codeIndex];
 				var network = coinjs.networks[chainCode];
 				var routeStatus = network.routeStatus || { status: 'community-run', label: 'Community-run route · external server' };
-				var routeClass = routeStatus.status === 'verified-hosted' ? 'coin-route-hosted' : 'coin-route-community';
-				var $verified = network.swapStatus === 'certified'
-					? $('<span>').addClass('glyphicon glyphicon-ok-sign coin-verified ' + routeClass).attr('title', routeStatus.label)
+				var routeClass = routeStatus.status === 'attested-hosted' ? 'coin-route-hosted' : 'coin-route-community';
+				var $attested = network.swapStatus === 'attested' || network.swapStatus === 'certified'
+					? $('<span>').addClass('glyphicon glyphicon-ok-sign coin-attested ' + routeClass).attr('title', routeStatus.label)
 					: $('<span>').addClass('glyphicon glyphicon-briefcase coin-wallet-only').attr('title', 'Wallet only');
 				var $link = $('<a>').attr('href', 'javascript:;').addClass('walletCoinSelect').attr('data-coin', chainCode);
-				$link.append($verified).append(document.createTextNode(' ' + chainCode + ' '));
+				$link.append($attested).append(document.createTextNode(' ' + chainCode + ' '));
 				$link.append($('<small>').addClass('text-muted').text(network.shortName || network.name || chainCode));
 				$menu.append($('<li>').addClass('wallet-coin-item').attr('data-coin', chainCode).append($link));
 			}
@@ -139,16 +139,16 @@ return typeof value === "string" && value !== "1";
 		$list.empty();
 		registry.codes().forEach(function(code){
 			var profile = registry.getProfile(code);
-			var certified = profile.swap.status === 'certified';
+			var attested = profile.swap.status === 'attested' || profile.swap.status === 'certified';
 			var routeStatus = registry.routeStatusForChain(code);
-			var routeClass = routeStatus.status === 'verified-hosted' ? 'chain-route-hosted' : 'chain-route-community';
+			var routeClass = routeStatus.status === 'attested-hosted' ? 'chain-route-hosted' : 'chain-route-community';
 			var $link = $('<a>')
 				.attr('href', '#chain/' + code)
 				.attr('data-chain', code)
 				.addClass('list-group-item chainInfoSelect' + (code === selectedCode ? ' active' : ''));
 			$link.append($('<span>').addClass('chain-info-code').text(code));
-			if(certified){
-				$link.append($('<span>').addClass('glyphicon glyphicon-ok-sign chain-info-verified ' + routeClass).attr('title', routeStatus.label));
+			if(attested){
+				$link.append($('<span>').addClass('glyphicon glyphicon-ok-sign chain-info-attested ' + routeClass).attr('title', routeStatus.label));
 			} else {
 				$link.append($('<span>').addClass('glyphicon glyphicon-briefcase chain-info-wallet-only').attr('title', 'Wallet only'));
 			}
@@ -170,7 +170,7 @@ return typeof value === "string" && value !== "1";
 			['Bech32 HRP', profile.bech32.hrp || 'Not available'],
 			['API adapter', profile.api.type]
 		];
-		if(profile.swap.status === 'certified'){
+		if(profile.swap.status === 'attested' || profile.swap.status === 'certified'){
 			rows.push(['Transaction model', profile.swap.transactionModel]);
 			rows.push(['Curve / signature', profile.swap.curve + ' / ' + profile.swap.signature]);
 			rows.push(['Escrow', profile.swap.escrow]);
@@ -191,8 +191,8 @@ return typeof value === "string" && value !== "1";
 		var $content = $('#chainInfoContent');
 		if(!$content.length || !registry) return normalized;
 		var profile = registry.getProfile(normalized);
-		var certified = profile.swap.status === 'certified';
-		var routes = registry.verifiedRoutes(normalized);
+		var attested = profile.swap.status === 'attested' || profile.swap.status === 'certified';
+		var routes = registry.attestedRoutes ? registry.attestedRoutes(normalized) : registry.verifiedRoutes(normalized);
 		var repositoryLinks = profile.repositories.map(function(repository){
 			return '<li>' + chainInfoSafeLink(repository.url, repository.label) + '</li>';
 		}).join('');
@@ -206,16 +206,16 @@ return typeof value === "string" && value !== "1";
 		}).join('');
 		var routeHtml = routes.length ? routes.map(function(route){
 			var legs = (route.legs || []).map(function(leg){
-				var legClass = leg.status === 'verified-hosted' ? 'chain-route-leg-hosted' : 'chain-route-leg-community';
+				var legClass = leg.status === 'attested-hosted' ? 'chain-route-leg-hosted' : 'chain-route-leg-community';
 				return '<span class="chain-route-leg ' + legClass + '"><span class="glyphicon glyphicon-ok-sign"></span> <b>' + chainInfoEsc(leg.code) + '</b> · ' + chainInfoEsc(leg.label) + '</span>';
 			}).join('');
 			return '<div class="chain-route-card"><div class="chain-route-market"><b>' + chainInfoEsc(route.market) + '</b> <span class="label label-default">canonical market</span></div>' +
 				'<div class="chain-route-directions text-muted">' + route.routes.map(chainInfoEsc).join(' &nbsp;·&nbsp; ') + '</div><div class="chain-route-legs">' + legs + '</div></div>';
-		}).join('') : '<p class="text-muted">No OTC swap route is certified for this wallet-only chain.</p>';
+		}).join('') : '<p class="text-muted">No OTC swap route is attested for this wallet-only chain.</p>';
 		var selectedRouteStatus = registry.routeStatusForChain(normalized);
-		var selectedRouteClass = selectedRouteStatus.status === 'verified-hosted' ? 'chain-status-hosted' : 'chain-status-community';
-		var swapFacts = certified ? [
-			'<div class="chain-status ' + selectedRouteClass + '"><span class="glyphicon glyphicon-ok-sign"></span><div><b>' + chainInfoEsc(selectedRouteStatus.label) + '</b><br><span>Protocol-certified as either asset or payment chain in every canonical market listed below.</span></div></div>',
+		var selectedRouteClass = selectedRouteStatus.status === 'attested-hosted' ? 'chain-status-hosted' : 'chain-status-community';
+		var swapFacts = attested ? [
+			'<div class="chain-status ' + selectedRouteClass + '"><span class="glyphicon glyphicon-ok-sign"></span><div><b>' + chainInfoEsc(selectedRouteStatus.label) + '</b><br><span>Protocol-attested as either asset or payment chain in every canonical market listed below.</span></div></div>',
 			'<table class="table table-condensed chain-info-table"><tbody>',
 			'<tr><th>Claim fee</th><td><code>' + chainInfoEsc(profile.swap.fees.claim + ' ' + profile.unit) + '</code></td></tr>',
 			'<tr><th>Refund fee</th><td><code>' + chainInfoEsc(profile.swap.fees.refund + ' ' + profile.unit) + '</code></td></tr>',
@@ -223,19 +223,19 @@ return typeof value === "string" && value !== "1";
 			'<tr><th>Hard dust floor</th><td><code>' + chainInfoEsc(profile.swap.policy.hardDustSats + ' base units') + '</code></td></tr>',
 			'<tr><th>Change threshold</th><td><code>' + chainInfoEsc(profile.swap.policy.changeThresholdSats + ' base units') + '</code></td></tr>',
 			'</tbody></table>'
-		].join('') : '<div class="chain-status chain-status-wallet"><span class="glyphicon glyphicon-briefcase"></span><div><b>Wallet support only</b><br><span>Address, key, explorer and transaction tools are available; OTC settlement is not certified.</span></div></div>';
+		].join('') : '<div class="chain-status chain-status-wallet"><span class="glyphicon glyphicon-briefcase"></span><div><b>Wallet support only</b><br><span>Address, key, explorer and transaction tools are available; OTC settlement is not attested.</span></div></div>';
 
 		$content.html([
 			'<article class="chain-info-page" data-chain="' + chainInfoEsc(normalized) + '">',
-			'<header class="chain-info-hero"><div><p class="rod-eyebrow">' + chainInfoEsc(profile.swap.status === 'certified' ? 'Verified settlement chain' : 'Wallet-supported chain') + '</p>',
+			'<header class="chain-info-hero"><div><p class="rod-eyebrow">' + chainInfoEsc(attested ? 'Attested settlement chain' : 'Wallet-supported chain') + '</p>',
 			'<h1>' + chainInfoEsc(profile.name) + ' <small>' + chainInfoEsc(profile.code) + '</small></h1>',
 			'<p>' + chainInfoEsc(profile.description) + '</p></div>',
-			'<div class="chain-info-status-badge ' + (certified ? (selectedRouteStatus.status === 'verified-hosted' ? 'is-hosted' : 'is-community') : 'is-wallet') + '">' + (certified ? '<span class="glyphicon glyphicon-ok-sign"></span> ' + chainInfoEsc(selectedRouteStatus.label) : '<span class="glyphicon glyphicon-briefcase"></span> Wallet only') + '</div></header>',
+			'<div class="chain-info-status-badge ' + (attested ? (selectedRouteStatus.status === 'attested-hosted' ? 'is-hosted' : 'is-community') : 'is-wallet') + '">' + (attested ? '<span class="glyphicon glyphicon-ok-sign"></span> ' + chainInfoEsc(selectedRouteStatus.label) : '<span class="glyphicon glyphicon-briefcase"></span> Wallet only') + '</div></header>',
 			'<div class="row chain-info-grid"><div class="col-md-6"><section class="chain-info-card"><h3>Network parameters</h3><table class="table table-condensed chain-info-table"><tbody>' + chainInfoRows(profile) + '</tbody></table></section></div>',
 			'<div class="col-md-6"><section class="chain-info-card"><h3>Endpoints</h3><table class="table table-condensed chain-info-table"><tbody>' + endpointRows + '</tbody></table></section>',
 			'<section class="chain-info-card"><h3>Official resources</h3><ul class="chain-info-links"><li>' + chainInfoSafeLink(profile.website, 'Official website') + '</li><li>' + chainInfoSafeLink(profile.documentation, 'Documentation') + '</li>' + repositoryLinks + '</ul></section></div></div>',
 			'<div class="row chain-info-grid"><div class="col-md-6"><section class="chain-info-card"><h3>Support status</h3>' + swapFacts + '</section></div>',
-			'<div class="col-md-6"><section class="chain-info-card"><h3>Verified swap routes</h3>' + routeHtml + '</section></div></div>',
+			'<div class="col-md-6"><section class="chain-info-card"><h3>Attested swap routes</h3>' + routeHtml + '</section></div></div>',
 			'<p class="chain-info-canonical"><span class="glyphicon glyphicon-link"></span> Canonical page: <code>#chain/' + chainInfoEsc(normalized) + '</code></p>',
 			'</article>'
 		].join(''));
@@ -865,12 +865,12 @@ return typeof value === "string" && value !== "1";
 			$("#walletActionPlaceholder").addClass("hidden");
 			/* Show pending message in the action panel */
 			if(!$('#walletBuyPending').length){
-				$('#walletActionPanel').append('<div id="walletBuyPending" class="walletOptions hidden"><h3><span class="glyphicon glyphicon-info-sign"></span> OTC swap support pending</h3><p class="text-muted">OTC atomic swap support for <b class="js-coin-unit">'+activeCoin+'</b> is not yet available. Currently swap-certified chains: <span class="js-swap-certified"></span>.</p><p class="text-muted">Wallet features (address generation, balance check, and key management) work normally.</p></div>');
+				$('#walletActionPanel').append('<div id="walletBuyPending" class="walletOptions hidden"><h3><span class="glyphicon glyphicon-info-sign"></span> OTC swap support pending</h3><p class="text-muted">OTC atomic swap support for <b class="js-coin-unit">'+activeCoin+'</b> is not yet available. Currently swap-attested chains: <span class="js-swap-attested"></span>.</p><p class="text-muted">Wallet features (address generation, balance check, and key management) work normally.</p></div>');
 			}
 			$('#walletBuyPending .js-coin-unit').text(activeCoin);
 			var swapCodes = (window.rodOtc && window.rodOtc.chains && window.rodOtc.chains.codes)
 				? window.rodOtc.chains.codes() : [];
-			$('#walletBuyPending .js-swap-certified').text(swapCodes.length ? swapCodes.join(', ') : 'none');
+			$('#walletBuyPending .js-swap-attested').text(swapCodes.length ? swapCodes.join(', ') : 'none');
 			$('#walletBuyPending').removeClass('hidden');
 			scrollToWalletActionPanel();
 		}

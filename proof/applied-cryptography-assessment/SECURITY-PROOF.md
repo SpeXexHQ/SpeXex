@@ -64,7 +64,7 @@ The theorem requires:
 - no invalid or non-canonical point reaches secret-scalar multiplication;
 - authenticated binding of `X`, `Y`, the exact message digest, and protocol role;
 - no nonce reuse or faulted signing output;
-- verification before a pre-signature is acted upon.
+- attestation before a pre-signature is acted upon.
 
 ## 4. DLEQ relation
 
@@ -158,7 +158,7 @@ A2 = zY - cR
 
 3. Program the challenge oracle on `(G,Y,R',R,A1,A2)` to return `c`.
 
-Verification equations hold by construction. In a real proof, uniform `w` makes `z = w+ck` uniform for fixed `c,k`; therefore the simulated and real transcript distributions agree up to negligible hash-to-scalar bias and rejected degeneracies. QED in the programmable ROM.
+Attestation equations hold by construction. In a real proof, uniform `w` makes `z = w+ck` uniform for fixed `c,k`; therefore the simulated and real transcript distributions agree up to negligible hash-to-scalar bias and rejected degeneracies. QED in the programmable ROM.
 
 The executable suite checks both simulator equations in 128 cases.
 
@@ -201,7 +201,7 @@ Given witness `y` for `Y = yG`, completion computes:
 s = s' * y^(-1) mod n
 ```
 
-ECDSA verification reconstructs:
+ECDSA attestation reconstructs:
 
 ```text
 s^(-1)(mG + rX)
@@ -214,7 +214,7 @@ s^(-1)(mG + rX)
 
 By definition, `r = x_coordinate(R) mod n`, so `(r,s)` is a valid ECDSA signature.
 
-If low-S normalization replaces `s` with `n-s`, verification reconstructs `-R`. The points `R` and `-R` have the same x-coordinate, so ECDSA remains valid. QED.
+If low-S normalization replaces `s` with `n-s`, attestation reconstructs `-R`. The points `R` and `-R` have the same x-coordinate, so ECDSA remains valid. QED.
 
 ## 11. Theorem: witness extraction and uniqueness
 

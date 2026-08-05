@@ -7,7 +7,7 @@
 **Commit:** `cb136d791c836c704a122278d00c7bfefde1a8b0`  
 **Date:** 2026-07-31  
 **Auditor posture:** No involvement in the protocol or wallet implementation  
-**Accreditation:** None; this is not a certified commercial audit
+**Accreditation:** None; this is not a attested commercial audit
 
 ## 1. Executive verdict
 
@@ -43,8 +43,8 @@ The private transcript order itself is not the critical cryptographic weakness. 
 - point and scalar encodings
 - main nonce derivation
 - proof nonce derivation
-- DLEQ statement, transcript, response, and verification
-- adaptor pre-signature generation and verification
+- DLEQ statement, transcript, response, and attestation
+- adaptor pre-signature generation and attestation
 - serialization
 - ECDSA completion and low-S handling
 - adaptor-witness recovery
@@ -74,7 +74,7 @@ Those excluded areas still affect whether the OTC swap is secure.
 4. Studied the evolution of adaptor-signature security definitions through 2026.
 5. Wrote an independent implementation using Node SHA-256 and `@noble/curves`.
 6. Generated deterministic vectors before loading wallet code.
-7. Differentially executed generation, verification, completion, and recovery against the wallet.
+7. Differentially executed generation, attestation, completion, and recovery against the wallet.
 8. Tested malformed inputs, every single-bit mutation of one serialized signature, proof extraction, proof simulation equations, final ECDSA validity, and CDH exposure.
 9. Proved supported properties algebraically and identified false or conditional properties.
 10. Audited whether the deployed implementation satisfies the proof assumptions.
@@ -93,7 +93,7 @@ Those excluded areas still affect whether the OTC swap is secure.
 | Unrelated completed-signature recovery | 1 rejected |
 | Trailing DER input | 1 rejected |
 | Exact wallet generation comparisons | 16 matched |
-| Wallet verification comparisons | 16 matched |
+| Wallet attestation comparisons | 16 matched |
 | Wallet completion comparisons | 16 matched |
 | Wallet recovery comparisons | 16 matched |
 | CDH exposure equations | 16 matched |
@@ -193,7 +193,7 @@ The holder of `y` can already compute `yX`, so the formula does not give that co
 
 **Residual risk.** Browsers do not provide general constant-time or guaranteed memory-erasure contracts.
 
-### AUD-05: No mandatory signer self-verification
+### AUD-05: No mandatory signer self-attestation
 
 **Severity:** Medium  
 **Status:** Confirmed
@@ -204,7 +204,7 @@ The holder of `y` can already compute `yX`, so the formula does not give that co
 
 **Remediation.** Serialize, strictly parse, and verify `(X,Y,m,pre)` before network publication. Fail closed and destroy the session signing child on any self-check failure.
 
-**Residual risk.** Self-verification catches output faults but does not guarantee fault-resistant scalar computation.
+**Residual risk.** Self-attestation catches output faults but does not guarantee fault-resistant scalar computation.
 
 ### AUD-06: Scalar, DER, and recovery parsing are not fully canonical
 
@@ -274,7 +274,7 @@ Production funding should remain disabled until:
 7. Secret operations move to a hardened implementation boundary.
 8. The complete swap protocol receives a separate chain/state proof and adversarial integration audit.
 9. A human cryptographer independently checks the full 2026 relaxed-security reduction against this DLEQ substitution.
-10. Live-chain claim and refund transactions are differentially verified on every supported network.
+10. Live-chain claim and refund transactions are differentially attested on every supported network.
 
 ## 9. Final professional opinion
 

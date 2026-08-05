@@ -33,7 +33,7 @@ The repo uses a legacy JavaScript implementation of ordinary **secp256k1 curve a
 | Core adaptor equations | Pass | High | The pre-sign, complete, verify, and recover equations are internally correct. |
 | Final ECDSA signature | Pass | High | Repo fixture is accepted by independent `@noble/curves`; low-S handling is correct. |
 | Legacy `SIGHASH_ALL` | Pass, sampled | High for tested path | A constructed 2-of-2 claim digest exactly matched `bitcoinjs-lib`. |
-| BIP340 for Nostr event IDs | Pass | High | All 15 official 32-byte-message verification cases matched; all 8 signing vectors matched byte-for-byte. |
+| BIP340 for Nostr event IDs | Pass | High | All 15 official 32-byte-message attestation cases matched; all 8 signing vectors matched byte-for-byte. |
 | Generic BIP340 API | Partial | High | Four valid official arbitrary-length-message vectors are rejected. NIP-01 signs a 32-byte event ID, so this does not break the current Nostr use. |
 | DLC/`secp256k1-zkp` adaptor compatibility | Fail | High | Each implementation rejects the other's valid 162-byte fixture. |
 | Public-key and point validation | Fail | High | Off-curve uncompressed points and non-canonical compressed encodings are accepted by the shared parser. |
@@ -79,11 +79,11 @@ Relevant code:
 
 The repository's deterministic adaptor fixture verifies internally, completes to a DER ECDSA signature, and recovers the expected adaptor secret.
 
-**Result:** pass, but this only proves internal consistency because generation and verification share the same code and custom transcript.
+**Result:** pass, but this only proves internal consistency because generation and attestation share the same code and custom transcript.
 
 ### 2. Final ECDSA signature
 
-The completed DER signature from the repository fixture was independently verified with `@noble/curves` against the expected secp256k1 public key and 32-byte message hash.
+The completed DER signature from the repository fixture was independently attested with `@noble/curves` against the expected secp256k1 public key and 32-byte message hash.
 
 **Result:** pass.
 
@@ -102,7 +102,7 @@ bitcoinjs-lib: ffe52419f3f0f8187c715c3c24e70994cb1f8ec1e30c6e80ba041e1acdadb631
 
 The implementation was run against the official [BIP340 test vectors](https://github.com/bitcoin/bips/blob/master/bip-0340/test-vectors.csv):
 
-- All 15 vectors with 32-byte messages produced the expected verification result.
+- All 15 vectors with 32-byte messages produced the expected attestation result.
 - All 8 vectors containing secret keys produced the exact expected signature.
 - Four valid vectors using messages of length 0, 1, 17, and 100 bytes were rejected because the implementation requires exactly 32 bytes.
 
@@ -114,8 +114,8 @@ The repo was tested with the valid DLC vector embedded in `secp256k1-zkp` and so
 
 - Serialized length: 162 bytes
 - ECDSA pre-signature equation: **pass**
-- Repo DLEQ verification: **fail**
-- Overall repo adaptor verification: **fail**
+- Repo DLEQ attestation: **fail**
+- Overall repo adaptor attestation: **fail**
 
 The reverse test also failed: compiled `secp256k1-zkp` rejected the repo's deterministic 162-byte fixture.
 
@@ -239,7 +239,7 @@ The [`secp256k1-zkp` adaptor API warning](https://github.com/BlockstreamResearch
 - A fresh 32-byte auxiliary value is supplied by the engine for each adaptor signature.
 - The DLEQ proof binds both nonce points and the adaptor point in its own transcript.
 - Received adaptor signatures are checked against the exact claim transaction sighash and expected signer public key.
-- Claim signatures are verified locally in redeem-script key order before broadcast.
+- Claim signatures are attested locally in redeem-script key order before broadcast.
 - ECDSA completion enforces low-S, and extraction handles the low-S sign ambiguity.
 - Nostr event signing matches the BIP340 vectors relevant to NIP-01.
 - The tested legacy transaction sighash matches an independent Bitcoin implementation.
@@ -249,7 +249,7 @@ The [`secp256k1-zkp` adaptor API warning](https://github.com/BlockstreamResearch
 Before real-value use, CI should fail unless all of these pass:
 
 1. Every positive and negative DLC/`secp256k1-zkp` adaptor vector.
-2. Two-way cross-implementation generation, verification, completion, and recovery.
+2. Two-way cross-implementation generation, attestation, completion, and recovery.
 3. Every official BIP340 vector with an explicit statement that the app profile signs only 32-byte Nostr IDs.
 4. SEC 1 malformed-point corpus: infinity, off-curve, hybrid, wrong length, `x >= p`, non-residue, and non-canonical encodings.
 5. Scalar boundaries: `0`, `n`, `n+1`, maximum 256-bit value, truncated values, and overflow encodings.

@@ -21,7 +21,7 @@ It specifies and independently implements the repository's private ECDSA adaptor
 | [`rod-web-swap-cryptographic-correctness-addendum.md`](rod-web-swap-cryptographic-correctness-addendum.md) | follow-up correctness notes |
 | [`rod-web-swap-otc-crypto-verdict.md`](rod-web-swap-otc-crypto-verdict.md) | short verdict summary |
 | [`src/private-adaptor-reference.mjs`](src/private-adaptor-reference.mjs) | clean-room implementation using `@noble/curves` |
-| [`test/`](test/) | vector generation, verification, and wallet cross-check scripts |
+| [`test/`](test/) | vector generation, attestation, and wallet cross-check scripts |
 | [`vectors/private-adaptor-v1.json`](vectors/private-adaptor-v1.json) | deterministic positive and negative vectors |
 | [`MANIFEST.sha256`](MANIFEST.sha256) | bundle-local integrity manifest |
 | [`package.json`](package.json) and [`package-lock.json`](package-lock.json) | pinned Node dependency metadata for the assessment scripts |
@@ -96,7 +96,7 @@ Run those commands from [`proof/applied-cryptography-assessment/`](./). This bun
 - 1 unrelated completed-signature recovery rejection
 - 1 trailing-DER rejection
 - 16 exact wallet generation matches
-- 16 wallet verification matches
+- 16 wallet attestation matches
 - 16 wallet completion matches
 - 16 wallet recovery matches
 - 16 executable CDH-exposure checks

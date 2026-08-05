@@ -301,7 +301,7 @@ check('wallet, explorer, and OTC support registries cannot drift', () => {
 		'e2e pair roles must be discovered from the authoritative registry');
 	assert(runnerSource.includes("require('../../js/chain-registry.js').swapCodes()") &&
 		runnerSource.includes('if(asset!==payment)') && runnerSource.includes('SUPPORTED_SWAP_PAIRS'),
-		'full matrix runner must discover every ordered pair of certified chains');
+		'full matrix runner must discover every ordered pair of attested chains');
 	assert(mockSource.includes('CHAIN_REGISTRY.codes()') && mockSource.includes('CHAIN_REGISTRY.swapCodes()'),
 		'mock chain versions and policy must derive from the authoritative registry');
 	const uiRegistry = uiSource.match(/function chainCodes\(\)\s*\{([\s\S]*?)\n\t\}/);
@@ -319,14 +319,14 @@ check('wallet, explorer, and OTC support registries cannot drift', () => {
 			code + ' public website/documentation URLs are missing');
 		assert(Array.isArray(profile.repositories) && profile.repositories.length > 0, code + ' repository inventory is missing');
 		assert(profile.api.operator === 'spexex' || profile.api.operator === 'community', code + ' API operator classification is missing');
-		const expectedRoutes = profile.swap.status === 'certified' ? definitions.length - 1 : 0;
-		assert(chainRegistry.verifiedRoutes(code).length === expectedRoutes, code + ' verified route inventory drifted');
+		const expectedRoutes = (profile.swap.status === 'attested' || profile.swap.status === 'certified') ? definitions.length - 1 : 0;
+		assert(chainRegistry.attestedRoutes(code).length === expectedRoutes, code + ' attested route inventory drifted');
 	}
 	assert(indexSource.indexOf('id="chainInfoNavItem"') > indexSource.indexOf('id="coinsMenu"') &&
 		indexSource.indexOf('id="chainInfoNavItem"') < indexSource.indexOf('glyphicon-briefcase'),
 		'Chain Info navigation must sit directly after Coins');
 	assert(indexSource.includes('id="chainInfoContent"') && walletUiSource.includes('function renderChainInfo(code)') &&
-		walletUiSource.includes('registry.verifiedRoutes(normalized)'),
+		walletUiSource.includes('registry.attestedRoutes(normalized)'),
 		'canonical chain pages must render directly from the authoritative registry');
 	assert(walletUiSource.includes('coin-route-hosted') && walletUiSource.includes('coin-route-community') &&
 		walletUiSource.includes('glyphicon glyphicon-briefcase coin-wallet-only') &&
@@ -349,7 +349,7 @@ check('wallet, explorer, and OTC support registries cannot drift', () => {
 		'; swap registry=' + definitions.join(',');
 });
 
-check('profile-only onboarding compiles every consumer and rejects incomplete certification', () => {
+check('profile-only onboarding compiles every consumer and rejects incomplete attestation', () => {
 	const profiles = chainRegistry.profiles();
 	const fixture = JSON.parse(JSON.stringify(profiles.LTC));
 	fixture.code = 'TST';
@@ -368,7 +368,7 @@ check('profile-only onboarding compiles every consumer and rejects incomplete ce
 	const broken = chainRegistry.profiles();
 	broken.LTC.swap.policy = null;
 	assert.throws(() => chainRegistry.compile(broken), /relay policy is missing/,
-		'incomplete certified profile was accepted');
+		'incomplete attested profile was accepted');
 	const collision = chainRegistry.profiles();
 	collision.LTC.address.multisig = collision.LTC.address.pub;
 	assert.throws(() => chainRegistry.compile(collision), /P2PKH and P2SH version bytes must differ/,

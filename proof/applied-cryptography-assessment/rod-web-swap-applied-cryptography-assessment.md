@@ -24,7 +24,7 @@ The first production decision should be a stop-ship for meaningful funds. The hi
 
 This review reconstructed the workflow from the browser UI, swap state machine, transaction builders, Nostr transport, adaptor-signature implementation, persistence layer, Electron wrapper, RPC helper, tests, and CI/release workflows. It also compared the implementation with relevant NIST, OWASP, W3C, GitHub Actions, Electron, Nostr, and Bitcoin protocol guidance.
 
-The review did not perform a live mainnet swap, compromise a public endpoint, audit the ROD consensus implementation, or prove the adaptor construction formally. It is therefore a risk assessment and code audit, not a certification or proof of security.
+The review did not perform a live mainnet swap, compromise a public endpoint, audit the ROD consensus implementation, or prove the adaptor construction formally. It is therefore a risk assessment and code audit, not a attestation or proof of security.
 
 ## Reconstructed OTC Workflow
 
@@ -38,7 +38,7 @@ sequenceDiagram
     S->>N: Terms, swap xpub, adaptor point
     B->>N: Acceptance, refund and adaptor signatures
     S->>R: Fund 2-of-2 P2SH
-    B->>A: Fund 2-of-2 P2SH after API verification
+    B->>A: Fund 2-of-2 P2SH after API attestation
     S->>A: Complete adaptor signature and claim
     A-->>B: Claim signature reveals secret
     B->>R: Complete adaptor signature and claim
@@ -67,7 +67,7 @@ sequenceDiagram
 | Privacy and unlinkability | Claimed in the specification | Not achieved. Public xpubs and relay transcripts directly link identities, orders, chains, amounts, and transactions. |
 | Forward secrecy | Not implemented | No forward secrecy or post-compromise security exists for relay messages. |
 | Availability and recovery | Intended | Pre-signed refunds help, but fixed fees, browser liveness, API dependence, and remote terminal states can disable recovery. |
-| Non-repudiation | Partial | Signatures and on-chain transactions provide key-control evidence, but not verified human/legal identity. This also conflicts with privacy. |
+| Non-repudiation | Partial | Signatures and on-chain transactions provide key-control evidence, but not attested human/legal identity. This also conflicts with privacy. |
 | Compliance | Unspecified | No FIPS, ISO 27001, or regulated-custody claim can be supported from the repository. |
 
 ## Threat Model
@@ -111,7 +111,7 @@ sequenceDiagram
 
 - `crypto.getRandomValues` is required and failure is fatal; key generation rejection-samples the secp256k1 scalar range ([randomness](https://github.com/bellodox/rod-web-swap/blob/cb136d791c836c704a122278d00c7bfefde1a8b0/js/coin.js#L271-L295), [private keys](https://github.com/bellodox/rod-web-swap/blob/cb136d791c836c704a122278d00c7bfefde1a8b0/js/coin.js#L465-L478)).
 - Ordinary transaction ECDSA uses deterministic nonces and low-S normalization.
-- The adaptor signature has the expected `R' = kG`, `R = kT`, `s' = k^-1(m + rx)` construction, a DLEQ proof, completed-signature verification, and `+/-t` recovery for low-S normalization ([adaptor implementation](https://github.com/bellodox/rod-web-swap/blob/cb136d791c836c704a122278d00c7bfefde1a8b0/js/ecdsa-adaptor.js#L82-L246)).
+- The adaptor signature has the expected `R' = kG`, `R = kT`, `s' = k^-1(m + rx)` construction, a DLEQ proof, completed-signature attestation, and `+/-t` recovery for low-S normalization ([adaptor implementation](https://github.com/bellodox/rod-web-swap/blob/cb136d791c836c704a122278d00c7bfefde1a8b0/js/ecdsa-adaptor.js#L82-L246)).
 - The adaptor nonce is domain-separated and mixed with auxiliary randomness, the signing key, message, and adaptor point ([nonce generation](https://github.com/bellodox/rod-web-swap/blob/cb136d791c836c704a122278d00c7bfefde1a8b0/js/coin.js#L426-L448)).
 - Nostr signing follows BIP340's tagged-hash and even-Y construction and uses fresh auxiliary randomness ([Nostr signing](https://github.com/bellodox/rod-web-swap/blob/cb136d791c836c704a122278d00c7bfefde1a8b0/js/otc-nostr.js#L86-L125), [BIP340](https://bips.dev/340/)).
 - Canonical terms include chain, amounts, keys, destinations, fees, confirmation requirements, and deadlines. A hash mismatch fails closed.
@@ -173,7 +173,7 @@ sequenceDiagram
 
 **Exploitation scenario.** After both legs are funded, a malicious seller sends `swap_complete`. The buyer stops polling and refund/secret-recovery automation. At release height the seller claims the buyer's alt output, revealing `t`; the buyer does not recover it; the seller later refunds its ROD output.
 
-**Recommended remediation.** Treat all relay settlement messages as hints. Derive `COMPLETE`, refund, and outpoint-resolved states only from locally verified chain data. Create a separate safety supervisor that continues monitoring both outpoints until each is confirmed spent. Enforce a role/type/current-state transition matrix and reject impossible, stale, or premature messages.
+**Recommended remediation.** Treat all relay settlement messages as hints. Derive `COMPLETE`, refund, and outpoint-resolved states only from locally attested chain data. Create a separate safety supervisor that continues monitoring both outpoints until each is confirmed spent. Enforce a role/type/current-state transition matrix and reject impossible, stale, or premature messages.
 
 **Residual risk.** Independent chain observation can still be delayed or partitioned. The watchdog needs redundant nodes, durable local state, user alerts, and a manual raw-transaction recovery path.
 
@@ -197,7 +197,7 @@ Add a hard latest-safe-claim height before which the seller must broadcast and a
 
 ### C-03: A Single Chain API Can Defeat Atomicity
 
-**Issue.** The browser queries one configured endpoint for chain tips and transaction data, then labels the result `verifiedLocally` merely because this browser made the API call ([API access](https://github.com/bellodox/rod-web-swap/blob/cb136d791c836c704a122278d00c7bfefde1a8b0/js/otc-engine.js#L220-L240), [funding lookup](https://github.com/bellodox/rod-web-swap/blob/cb136d791c836c704a122278d00c7bfefde1a8b0/js/otc-engine.js#L831-L870), [verification flag](https://github.com/bellodox/rod-web-swap/blob/cb136d791c836c704a122278d00c7bfefde1a8b0/js/otc-app-ui.js#L1676-L1686)).
+**Issue.** The browser queries one configured endpoint for chain tips and transaction data, then labels the result `verifiedLocally` merely because this browser made the API call ([API access](https://github.com/bellodox/rod-web-swap/blob/cb136d791c836c704a122278d00c7bfefde1a8b0/js/otc-engine.js#L220-L240), [funding lookup](https://github.com/bellodox/rod-web-swap/blob/cb136d791c836c704a122278d00c7bfefde1a8b0/js/otc-engine.js#L831-L870), [attestation flag](https://github.com/bellodox/rod-web-swap/blob/cb136d791c836c704a122278d00c7bfefde1a8b0/js/otc-app-ui.js#L1676-L1686)).
 
 **Why it matters.** Server-authenticated HTTPS data is not a consensus proof. The buyer's decision to fund the alt leg depends on this answer.
 
@@ -289,7 +289,7 @@ Add a hard latest-safe-claim height before which the seller must broadcast and a
 
 **Recommended remediation.** Never execute untrusted head code in a privileged `workflow_run`. Build pull requests in an unprivileged workflow with no secrets. Build releases only from protected tags/commits on the trusted default branch after review, use environment approvals for signing, pin actions by full commit SHA, generate signed provenance/SBOMs, and publish only signed/notarized artifacts.
 
-**Residual risk.** Trusted maintainer compromise and dependency compromise remain. Reproducible builds, multi-party release approval, and independent signature verification reduce this risk.
+**Residual risk.** Trusted maintainer compromise and dependency compromise remain. Reproducible builds, multi-party release approval, and independent signature attestation reduce this risk.
 
 ### M-01: Transcript and Persisted-State Integrity Is Incomplete
 
@@ -355,7 +355,7 @@ Add a hard latest-safe-claim height before which the seller must broadcast and a
 
 **Issue.** `tests/run-fast.sh` invokes `tests/harness/run-all.sh` as an executable, but the reviewed tree lacks the executable bit. CI compensates with `chmod`.
 
-**Why it matters.** Local release verification can fail before running security gates, encouraging inconsistent workarounds.
+**Why it matters.** Local release attestation can fail before running security gates, encouraging inconsistent workarounds.
 
 **Exploitation scenario.** A maintainer mistakes the permission failure for an environment issue and releases without completing the intended gate.
 
@@ -452,7 +452,7 @@ If production safety is more important than scriptless on-chain privacy, conside
 9. How are users expected to back up and recover the master wallet and an in-flight swap after device loss, browser corruption, or terminal-state tampering?
 10. What node/explorer behavior is expected during a reorg, conflicting claim/refund, stuck fixed-fee transaction, or prolonged chain halt?
 
-## Verification Performed
+## Attestation Performed
 
 - Source review pinned to commit `cb136d791c836c704a122278d00c7bfefde1a8b0`.
 - Fast repository suites passed through the harness directly: 12/12 release gates, 5/5 explorer groups, 9/9 security regression groups, 5/5 wallet race regressions, and 7/7 blocker mutations. These tests do not encode the critical terminal-message and release/refund-race properties above.

@@ -48,7 +48,7 @@
       "detail": ""
     },
     {
-      "name": "both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures",
+      "name": "both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures",
       "ok": true,
       "detail": ""
     },
@@ -80,7 +80,7 @@
     {
       "name": "pre-signed ROD refund broadcast & independently validated (locktime + 2-of-2 sigs)",
       "ok": true,
-      "detail": "locktime 500030 satisfied at height 500035 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order) | fee 51900 sats over 304 bytes (170.72 sat/B)"
+      "detail": "locktime 500030 satisfied at height 500035 | input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order) | fee 51900 sats over 304 bytes (170.72 sat/B)"
     },
     {
       "name": "alice session reached refund state",
@@ -124,7 +124,7 @@
       "valid": true,
       "details": [
         "locktime 500030 satisfied at height 500035",
-        "input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs verified in order)",
+        "input 0: P2SH 2-of-2 CHECKMULTISIG valid (2 sigs attested in order)",
         "fee 51900 sats over 304 bytes (170.72 sat/B)"
       ]
     }

@@ -18,14 +18,14 @@ Static browser-based SpaceXpanse ROD wallet, PWA shell, and experimental OTC swa
 
 ## What SpeXex is
 
-[`SpeXex`](README.md) is the current project identity for this repository. It is a static browser wallet centered on SpaceXpanse ROD, extended with an integrated OTC swap runtime that can coordinate trust-minimized swaps between certified Bitcoin-derived chains.
+[`SpeXex`](README.md) is the current project identity for this repository. It is a static browser wallet centered on SpaceXpanse ROD, extended with an integrated OTC swap runtime that can coordinate trust-minimized swaps between attested Bitcoin-derived chains.
 
 The codebase is intentionally build-free at the repository root:
 
 - the main application is loaded directly from [`index.html`](index.html);
 - wallet, OTC, and explorer logic live in plain browser JavaScript under [`js/`](js/);
 - the PWA shell is defined by [`manifest.webmanifest`](manifest.webmanifest) and [`sw.js`](sw.js);
-- verification is performed by deterministic Node-based gates in [`tests/`](tests/) and the real-browser settlement harness in [`tests/harness/`](tests/harness/).
+- attestation is performed by deterministic Node-based gates in [`tests/`](tests/) and the real-browser settlement harness in [`tests/harness/`](tests/harness/).
 
 ## Core capabilities
 
@@ -54,8 +54,8 @@ The codebase is intentionally build-free at the repository root:
 ### Supported chain model
 
 - one authoritative registry in [`js/chain-registry.js`](js/chain-registry.js)
-- certified settlement chains currently include ROD, Litecoin, and Dogecoin
-- wallet-only chains remain available for wallet functionality without being certified for settlement
+- attested settlement chains currently include ROD, Litecoin, and Dogecoin
+- wallet-only chains remain available for wallet functionality without being attested for settlement
 - a chain can serve as either `assetChain` or `paymentChain`; role is selected per swap, not by separate codepaths
 
 ## Current architecture
@@ -69,7 +69,7 @@ SpeXex currently operates as three cooperating layers:
 Repository-level entrypoints reflect those layers:
 
 - [`index.html`](index.html) — single-page application shell
-- [`js/chain-registry.js`](js/chain-registry.js) — authoritative chain, API, policy, and certification source
+- [`js/chain-registry.js`](js/chain-registry.js) — authoritative chain, API, policy, and attestation source
 - [`js/coin.js`](js/coin.js) — transaction helpers, signing, wallet network data, and API wrappers
 - [`js/coinbin.js`](js/coinbin.js) — wallet controller and page wiring
 - [`js/otc-app-ui.js`](js/otc-app-ui.js) — OTC interface, orderbook, session views, and operator actions
@@ -110,7 +110,7 @@ The swap economic sequence is fixed:
 4. the revealed secret enables the asset claim;
 5. the payment refund must therefore mature before the asset refund.
 
-### Certified non-ROD chain details
+### Attested non-ROD chain details
 
 | Property | Litecoin | Dogecoin |
 |---|---|---|
@@ -169,7 +169,7 @@ Default assumptions in the shipped wallet include:
 
 For Windows helper usage, the checked-in executable is [`tools/rod-rpc-cors-proxy.exe`](tools/rod-rpc-cors-proxy.exe).
 
-## Verification workflow
+## Attestation workflow
 
 ### Fast required gate
 
@@ -186,9 +186,9 @@ That gate covers:
 - wallet race regressions
 - negative-control mutation checks
 
-### Full browser certification gate
+### Full browser attestation gate
 
-Before release, use the sequential harness in [`tests/harness/`](tests/harness/) as documented in [`tests/harness/README.md`](tests/harness/README.md). It drives the real app in headless Chromium, reloads the PWA shell offline, and verifies every ordered pair of distinct certified chains.
+Before release, use the sequential harness in [`tests/harness/`](tests/harness/) as documented in [`tests/harness/README.md`](tests/harness/README.md). It drives the real app in headless Chromium, reloads the PWA shell offline, and verifies every ordered pair of distinct attested chains.
 
 ### Historical proof artifacts
 

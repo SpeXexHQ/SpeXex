@@ -10,7 +10,7 @@
  * SCENARIO=happy (default):
  *   1. In-page OTC validation suites pass.
  *   2. Both sides PLAN (sign, don't broadcast) funding, exchange pre-signed
- *      timelocked refunds, exchange VERIFIED adaptor signatures → PREPARED.
+ *      timelocked refunds, exchange ATTESTED adaptor signatures → PREPARED.
  *   3. Alice's fully-signed ROD refund is REJECTED as non-final before its
  *      lock height (proves the timelock actually protects the funds).
  *   4. Timeline proves PREPARED came before any funding broadcast.
@@ -56,7 +56,7 @@ const ALT = PAYMENT;
 const SUPPORTED_SWAP_CHAINS = CHAIN_REGISTRY.swapCodes();
 if (!SUPPORTED_SWAP_CHAINS.includes(ASSET) || !SUPPORTED_SWAP_CHAINS.includes(PAYMENT) || ASSET === PAYMENT) {
   throw new Error(
-    `Unsupported settlement pair ${ASSET}/${PAYMENT}; distinct certified chains are ` +
+    `Unsupported settlement pair ${ASSET}/${PAYMENT}; distinct attested chains are ` +
     `${SUPPORTED_SWAP_CHAINS.join(', ')}`
   );
 }
@@ -79,10 +79,10 @@ function harnessProfile(code) {
   const swap = profile.swap;
   const startServer = MOCK_SERVER_BY_API_TYPE[profile.api.type];
   if (!startServer) {
-    throw new Error(`Certified chain ${code} uses ${profile.api.type}, but the proof harness has no mock server for that API type`);
+    throw new Error(`Attested chain ${code} uses ${profile.api.type}, but the proof harness has no mock server for that API type`);
   }
   return {
-    amount: swap.certification.testAmount,
+    amount: swap.attestation.testAmount,
     claimFee: decimalToBaseUnits(swap.fees.claim),
     refundBlocks: swap.refundBlocks.payment,
     assetRefundBlocks: swap.refundBlocks.asset,
@@ -685,14 +685,14 @@ async function main() {
   await waitForProtocolStage('both timelocked refund exchanges completed', (a, b) =>
     a.role === 'seller' && a.assetRefundSigned && a.paymentRefundCosigned &&
     b.role === 'buyer' && b.assetRefundCosigned && b.paymentRefundSigned);
-  await waitForProtocolStage('both claim adaptor signatures exchanged and verified', (a, b) =>
+  await waitForProtocolStage('both claim adaptor signatures exchanged and attested', (a, b) =>
     a.localAssetAdaptorSignature && a.remotePaymentAdaptorSignature &&
     b.localPaymentAdaptorSignature && b.remoteAssetAdaptorSignature);
   await waitForProtocolStage('both peers persisted local PREPARED', (a, b) =>
     a.localPrepared && b.localPrepared);
   await waitForProtocolStage('both peers observed counterparty PREPARED', (a, b) =>
     a.remotePrepared && b.remotePrepared);
-  step('both sides PREPARED: planned fundings, pre-signed refunds, verified adaptor signatures', true);
+  step('both sides PREPARED: planned fundings, pre-signed refunds, attested adaptor signatures', true);
 
   const aliceRefund = await alice.evaluate((id) => {
     const s = rodOtc.engine.restoreLive(id);

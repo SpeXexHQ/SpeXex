@@ -131,7 +131,7 @@ async function main() {
 					hasDescription: !!(article && article.textContent.includes(profile.description)),
 					endpointLinks: article ? article.querySelectorAll('section a[href^="https://"]').length : 0,
 					routeCards: article ? article.querySelectorAll('.chain-route-card').length : 0,
-					expectedRoutes: registry.verifiedRoutes(code).length,
+					expectedRoutes: registry.attestedRoutes(code).length,
 					metadataComplete: typeof profile.description === 'string' && profile.description.length >= 40 &&
 						/^https:\/\//.test(profile.website) && /^https:\/\//.test(profile.documentation) &&
 						Array.isArray(profile.repositories) && profile.repositories.length > 0
@@ -139,8 +139,8 @@ async function main() {
 			}
 			const coinsMenu = document.getElementById('coinsMenu');
 			const infoMenu = document.getElementById('chainInfoNavItem');
-			const verifiedMenuCodes = Array.from(document.querySelectorAll('.walletCoinSelect')).filter((link) =>
-				!!link.querySelector('.coin-verified')
+			const attestedMenuCodes = Array.from(document.querySelectorAll('.walletCoinSelect')).filter((link) =>
+				!!link.querySelector('.coin-attested')
 			).map((link) => link.getAttribute('data-coin')).sort();
 			const hostedMenuCodes = Array.from(document.querySelectorAll('.walletCoinSelect .coin-route-hosted')).map((node) => node.closest('.walletCoinSelect').getAttribute('data-coin')).sort();
 			const communityMenuCodes = Array.from(document.querySelectorAll('.walletCoinSelect .coin-route-community')).map((node) => node.closest('.walletCoinSelect').getAttribute('data-coin')).sort();
@@ -165,8 +165,8 @@ async function main() {
 				codes,
 				pages,
 				menuImmediatelyAfterCoins: !!(coinsMenu && infoMenu && coinsMenu.nextElementSibling === infoMenu),
-				verifiedMenuCodes,
-				expectedVerifiedMenuCodes: registry.swapCodes().slice().sort(),
+				attestedMenuCodes,
+				expectedAttestedMenuCodes: registry.swapCodes().slice().sort(),
 				hostedMenuCodes,
 				communityMenuCodes,
 				mainWalletOnlyCodes,
@@ -199,7 +199,7 @@ async function main() {
 		);
 		step(
 			'route ownership colors, wallet-only icons, and background-only active state are distinct',
-			JSON.stringify(chainInfo.verifiedMenuCodes) === JSON.stringify(chainInfo.expectedVerifiedMenuCodes) &&
+			JSON.stringify(chainInfo.attestedMenuCodes) === JSON.stringify(chainInfo.expectedAttestedMenuCodes) &&
 				JSON.stringify(chainInfo.hostedMenuCodes) === JSON.stringify(['ROD']) &&
 				JSON.stringify(chainInfo.communityMenuCodes) === JSON.stringify(['DOGE', 'LTC']) &&
 				JSON.stringify(chainInfo.mainWalletOnlyCodes) === JSON.stringify(['BCH', 'BTC', 'DGB']) &&
@@ -209,7 +209,7 @@ async function main() {
 				chainInfo.hostedMainColors.every((color) => color === 'rgb(71, 209, 108)') &&
 				chainInfo.hostedChainColors.every((color) => color === 'rgb(71, 209, 108)') &&
 				chainInfo.activeMenuCodes.length === 1 && chainInfo.arrowCount === 0,
-			JSON.stringify({ verified: chainInfo.verifiedMenuCodes, hosted: chainInfo.hostedMenuCodes, community: chainInfo.communityMenuCodes, mainWalletOnly: chainInfo.mainWalletOnlyCodes, chainWalletOnly: chainInfo.chainWalletOnlyCodes, communityMainColors: chainInfo.communityMainColors, communityChainColors: chainInfo.communityChainColors, hostedMainColors: chainInfo.hostedMainColors, hostedChainColors: chainInfo.hostedChainColors, active: chainInfo.activeMenuCodes, arrows: chainInfo.arrowCount })
+			JSON.stringify({ attested: chainInfo.attestedMenuCodes, hosted: chainInfo.hostedMenuCodes, community: chainInfo.communityMenuCodes, mainWalletOnly: chainInfo.mainWalletOnlyCodes, chainWalletOnly: chainInfo.chainWalletOnlyCodes, communityMainColors: chainInfo.communityMainColors, communityChainColors: chainInfo.communityChainColors, hostedMainColors: chainInfo.hostedMainColors, hostedChainColors: chainInfo.hostedChainColors, active: chainInfo.activeMenuCodes, arrows: chainInfo.arrowCount })
 		);
 		step(
 			'clicking a Chain Info coin switches the active network and locked OTC asset website-wide',
