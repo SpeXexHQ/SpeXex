@@ -108,6 +108,11 @@
 				var message = (parsed.error && parsed.error.message) ? parsed.error.message : String(parsed.error);
 				return deferred().reject(message).promise();
 			}
+			if (parsed && parsed.ok === false) {
+				var apiMessage = parsed.error || parsed.message || ('API request failed for ' + url);
+				if (typeof apiMessage !== 'string') apiMessage = JSON.stringify(apiMessage);
+				return deferred().reject(apiMessage).promise();
+			}
 			return parsed;
 		});
 	}
@@ -574,11 +579,189 @@
 		}
 	};
 
+	/* ------------------------------------------------------------------
+	   Driver: Bloodstone wallet API
+
+	   Base: https://bloodstone.rocks/stone-wallet-api
+	   Contract probe (2026-08-06) exposes:
+	     GET  /api/v1/address/<addr>/balance
+	     GET  /api/v1/address/<addr>/utxos
+	     GET  /api/v1/tx/<txid>
+	     GET  /api/v1/height
+	     POST /api/v1/broadcast  JSON {"hex":"..."}
+
+	   The endpoint is wallet-oriented rather than Esplora-native, so the
+	   adapter normalizes several plausible field spellings into the wallet's
+	   existing Esplora-shaped contract.
+	   ------------------------------------------------------------------ */
+
+	function stoneField(source, names, fallback) {
+		if (!source) return fallback;
+		for (var i = 0; i < names.length; i++) {
+			if (typeof source[names[i]] !== 'undefined') return source[names[i]];
+		}
+		return fallback;
+	}
+
+	function stoneStatus(confirmed, blockHeight, confirmations) {
+		var normalizedHeight = toInt(blockHeight, 0);
+		var normalizedConfirmations = toInt(confirmations, 0);
+		var isConfirmed = (typeof confirmed === 'boolean')
+			? confirmed
+			: (normalizedConfirmations > 0 || normalizedHeight > 0);
+		return {
+			confirmed: !!isConfirmed,
+			block_height: isConfirmed ? normalizedHeight : 0
+		};
+	}
+
+	function stoneTxToEsplora(tx) {
+		var raw = tx && tx.data ? tx.data : tx;
+		if (raw && raw.hex && !stoneField(raw, ['vin', 'inputs', 'vout', 'outputs'], null)) {
+			return {
+				txid: stoneField(raw, ['txid', 'hash'], ''),
+				version: toInt(stoneField(raw, ['version'], 1), 1),
+				locktime: toInt(stoneField(raw, ['locktime', 'lock_time'], 0), 0),
+				size: toInt(stoneField(raw, ['size', 'vsize'], 0), 0),
+				fee: baseUnits(stoneField(raw, ['fee', 'fees'], 0)),
+				vin: [],
+				vout: [],
+				hex: stoneField(raw, ['hex', 'rawhex', 'rawHex'], ''),
+				confirmations: toInt(stoneField(raw, ['confirmations'], 0), 0),
+				status: stoneStatus(
+					stoneField(raw, ['confirmed'], undefined),
+					stoneField(raw, ['block_height', 'blockHeight', 'height'], 0),
+					stoneField(raw, ['confirmations'], 0)
+				)
+			};
+		}
+		var vinSource = stoneField(raw, ['vin', 'inputs'], []);
+		var voutSource = stoneField(raw, ['vout', 'outputs'], []);
+		var vin = [];
+		for (var i = 0; i < vinSource.length; i++) {
+			var input = vinSource[i] || {};
+			var prevout = stoneField(input, ['prevout', 'prevOut'], null) || {};
+			vin.push({
+				txid: stoneField(input, ['txid', 'prev_txid', 'prevTxid', 'transaction_hash'], ''),
+				vout: toInt(stoneField(input, ['vout', 'prev_vout', 'prevVout', 'index'], 0), 0),
+				scriptsig: stoneField(input, ['scriptsig', 'scriptSig', 'script'], ''),
+				sequence: toInt(stoneField(input, ['sequence'], 0xffffffff), 0xffffffff),
+				prevout: {
+					value: baseUnits(stoneField(prevout, ['value', 'amount', 'satoshis'], stoneField(input, ['value', 'amount', 'satoshis'], 0))),
+					scriptpubkey_address: stoneField(prevout, ['scriptpubkey_address', 'address'], stoneField(input, ['address'], ''))
+				}
+			});
+		}
+		var vout = [];
+		for (var j = 0; j < voutSource.length; j++) {
+			var output = voutSource[j] || {};
+			vout.push({
+				n: toInt(stoneField(output, ['n', 'vout', 'index'], j), j),
+				value: baseUnits(stoneField(output, ['value', 'amount', 'satoshis'], 0)),
+				scriptpubkey: stoneField(output, ['scriptpubkey', 'scriptPubKey', 'script'], ''),
+				scriptpubkey_address: stoneField(output, ['scriptpubkey_address', 'address'], ''),
+				spent_by: stoneField(output, ['spent_by', 'spentBy', 'spent_txid', 'spentTxId'], '')
+			});
+		}
+		var confirmations = toInt(stoneField(raw, ['confirmations'], 0), 0);
+		var blockHeight = stoneField(raw, ['block_height', 'blockHeight', 'height'], 0);
+		var status = stoneStatus(stoneField(raw, ['confirmed'], undefined), blockHeight, confirmations);
+		return {
+			txid: stoneField(raw, ['txid', 'hash'], ''),
+			version: toInt(stoneField(raw, ['version'], 1), 1),
+			locktime: toInt(stoneField(raw, ['locktime', 'lock_time'], 0), 0),
+			size: toInt(stoneField(raw, ['size', 'vsize'], 0), 0),
+			fee: baseUnits(stoneField(raw, ['fee', 'fees'], 0)),
+			vin: vin,
+			vout: vout,
+			hex: stoneField(raw, ['hex', 'rawhex', 'rawHex'], ''),
+			confirmations: confirmations || (status.confirmed ? 1 : 0),
+			status: status
+		};
+	}
+
+	var stoneapiDriver = {
+		name: 'stoneapi',
+		utxos: function (base, address) {
+			return getJson(base + '/api/v1/address/' + encodeURIComponent(address) + '/utxos').then(function (data) {
+				var list = data && data.data ? data.data : (data && data.utxos ? data.utxos : data);
+				if (!coinjs.isArray(list)) {
+					return deferred().reject('Unexpected STONE UTXO response').promise();
+				}
+				var out = [];
+				for (var i = 0; i < list.length; i++) {
+					var u = list[i] || {};
+					out.push({
+						txid: stoneField(u, ['txid', 'transaction_hash', 'hash'], ''),
+						vout: toInt(stoneField(u, ['vout', 'index', 'n'], 0), 0),
+						value: baseUnits(stoneField(u, ['value_sats', 'value', 'amount', 'satoshis'], 0)),
+						scriptpubkey: stoneField(u, ['script_pubkey', 'scriptpubkey', 'scriptPubKey', 'script'], ''),
+						confirmations: toInt(stoneField(u, ['confirmations'], stoneField(u, ['height'], 0) ? 1 : 0), 0)
+					});
+				}
+				return out;
+			});
+		},
+		balance: function (base, address) {
+			return getJson(base + '/api/v1/address/' + encodeURIComponent(address) + '/balance').then(function (data) {
+				var payload = data && data.data ? data.data : data;
+				var direct = stoneField(payload, ['balance', 'confirmed', 'confirmed_balance', 'confirmedBalance', 'confirmed_sats', 'final_balance', 'satoshis'], undefined);
+				if (typeof direct !== 'undefined') return baseUnits(direct);
+				var total = stoneField(payload, ['total_sats'], undefined);
+				if (typeof total !== 'undefined') return baseUnits(total);
+				var confirmed = baseUnits(stoneField(payload, ['funded', 'funded_txo_sum'], 0)) - baseUnits(stoneField(payload, ['spent', 'spent_txo_sum'], 0));
+				var mempool = baseUnits(stoneField(payload, ['unconfirmed_sats', 'mempool_funded', 'mempool_funded_txo_sum'], 0)) - baseUnits(stoneField(payload, ['mempool_spent', 'mempool_spent_txo_sum'], 0));
+				return confirmed + mempool;
+			});
+		},
+		tx: function (base, txid) {
+			return getJson(base + '/api/v1/tx/' + encodeURIComponent(txid)).then(stoneTxToEsplora);
+		},
+		txHex: function (base, txid) {
+			return stoneapiDriver.tx(base, txid).then(function (tx) {
+				if (tx.hex && /^[0-9a-f]+$/i.test(tx.hex)) return tx.hex;
+				return deferred().reject('STONE API returned no tx hex for ' + txid).promise();
+			});
+		},
+		outspend: function (base, txid, vout) {
+			return stoneapiDriver.tx(base, txid).then(function (tx) {
+				var out = tx.vout[toInt(vout, 0)];
+				if (!out) return { spent: false };
+				if (out.spent_by) return { spent: true, txid: out.spent_by };
+				return { spent: !!out.spent };
+			});
+		},
+		tipHeight: function (base) {
+			return getJson(base + '/api/v1/height').then(function (data) {
+				var payload = data && data.data ? data.data : data;
+				var height = toInt(stoneField(payload, ['height'], 0), 0);
+				if (height <= 0) return deferred().reject('Invalid STONE tip height').promise();
+				return height;
+			});
+		},
+		broadcast: function (base, txhex) {
+			return postRaw(base + '/api/v1/broadcast', JSON.stringify({ hex: txhex }), 'application/json').then(function (body) {
+				var parsed;
+				try { parsed = JSON.parse(body); } catch (e) {
+					return { success: false, txid: '', error: body || 'Broadcast failed', raw: body };
+				}
+				var txid = (parsed && (parsed.txid || parsed.hash || (parsed.data && (parsed.data.txid || parsed.data.hash)))) || '';
+				if ((parsed && parsed.ok !== false) && /^[a-fA-F0-9]{64}$/.test(txid)) {
+					return { success: true, txid: txid, error: '', raw: parsed };
+				}
+				var message = (parsed && (parsed.error || parsed.message || (parsed.data && parsed.data.error))) || 'Broadcast failed';
+				if (typeof message !== 'string') message = JSON.stringify(message);
+				return { success: false, txid: '', error: message, raw: parsed };
+			});
+		}
+	};
+
 	explorer.drivers = {
 		esplora: esploraDriver,
 		blockcypher: blockcypherDriver,
 		blockchair: blockchairDriver,
-		blockbook: blockbookDriver
+		blockbook: blockbookDriver,
+		stoneapi: stoneapiDriver
 	};
 
 	/* ------------------------------------------------------------------
@@ -589,9 +772,21 @@
 		return !!(network && explorer.drivers[network.apiType]);
 	};
 
+	/* Normalize user-configurable API bases so the driver sees one canonical
+	   root. STONE historically accepted the wallet host root in Settings, while
+	   some saved/manual values include the `/api/v1` prefix that the driver adds
+	   itself. Without normalization that duplicated segment produces 404s. */
+	function normalizedApiBase(driver, base) {
+		var trimmedBase = String(base || '').replace(/\/+$/, '');
+		if (driver && driver.name === 'stoneapi') {
+			return trimmedBase.replace(/\/api\/v1$/i, '');
+		}
+		return trimmedBase;
+	}
+
 	function dispatch(network, method, args) {
 		var driver = network && explorer.drivers[network.apiType];
-		var base = String((network && network.apiBase) || '').replace(/\/+$/, '');
+		var base = normalizedApiBase(driver, (network && network.apiBase) || '');
 		if (!driver || typeof driver[method] !== 'function' || !base) {
 			return deferred().reject(
 				'No usable explorer backend for ' + ((network && network.code) || '?') +

@@ -184,6 +184,34 @@
 				}
 			}
 		},
+		STONE: {
+			code: 'STONE',
+			name: 'Bloodstone',
+			shortName: 'Bloodstone',
+			unit: 'STONE',
+			uriPrefix: 'bloodstone',
+			description: 'Bloodstone is a Bitcoin-derived UTXO cryptocurrency with public wallet API support at bloodstone.rocks. This build currently exposes wallet, explorer, and transaction tooling only.',
+			website: 'https://bloodstone.rocks',
+			documentation: 'https://bloodstone.rocks/stone-wallet-api',
+			repositories: [
+				{ label: 'Bloodstone source repository', url: 'https://github.com/TheBloodStone/bloodstone' }
+			],
+			address: { pub: 0x3f, priv: 0xbf, multisig: 0x7d },
+			/* The current public integration source proves the wallet-visible
+			   address/WIF/Bech32 surface and API contract, but not custom BIP32
+			   version bytes. Use the standard xpub/xprv serialization until an
+			   authoritative upstream source is reviewed in-repo. */
+			hdkey: { prv: 0x0488ade4, pub: 0x0488b21e },
+			bech32: { charset: BECH32_CHARSET, version: 0, hrp: 'stone' },
+			segwit: true,
+			explorer: {
+				tx: 'https://bloodstone.rocks/explorer/tx/',
+				addr: 'https://bloodstone.rocks/explorer/address/',
+				block: 'https://bloodstone.rocks/explorer/block/'
+			},
+			api: { type: 'stoneapi', base: 'https://bloodstone.rocks/stone-wallet-api', operator: 'community' },
+			swap: { status: 'wallet-only' }
+		},
 		BTC: {
 			code: 'BTC',
 			name: 'Bitcoin',

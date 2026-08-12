@@ -190,6 +190,55 @@ async function testBlockbook() {
 	assert.strictEqual(await explorer.txHex(net, txid), '01000000');
 }
 
+async function testStoneApi() {
+	const net = { code: 'STONE', apiType: 'stoneapi', apiBase: 'https://mock.invalid/stone/api/v1' };
+	const txid = 'ab'.repeat(32);
+	reset((url, method, options) => {
+		if (url.includes('/api/v1/address/Sstone/balance')) {
+			return JSON.stringify({ ok: true, confirmed_sats: 123456789, unconfirmed_sats: 11, total_stone: 1.23456789 });
+		}
+		if (url.includes('/api/v1/address/Sstone/utxos')) {
+			return JSON.stringify({
+				ok: true,
+				utxos: [{ txid, vout: 1, value_sats: '123456789', script_pubkey: '76a9', height: 19040 }]
+			});
+		}
+		if (url.endsWith('/api/v1/height')) return JSON.stringify({ ok: true, height: 19041 });
+		if (url.includes('/api/v1/tx/' + txid)) {
+			return JSON.stringify({
+				ok: true,
+				txid,
+				hex: '01000000',
+				confirmations: 2,
+				block_height: 19040
+			});
+		}
+		if (url.endsWith('/api/v1/broadcast') && method === 'POST') {
+			assert.strictEqual(JSON.parse(options.body).hex, '01000000');
+			return JSON.stringify({ ok: true, txid });
+		}
+		throw new Error('unexpected STONE API request ' + method + ' ' + url);
+	});
+	assert.strictEqual(await explorer.balance(net, 'Sstone'), 123456789);
+	assert.strictEqual(requests[0].url.includes('/api/v1/api/v1/'), false, 'STONE base normalization must avoid duplicated /api/v1');
+	assert.deepStrictEqual(
+		JSON.parse(JSON.stringify(await explorer.utxos(net, 'Sstone'))),
+		[{ txid, vout: 1, value: 123456789, scriptpubkey: '76a9', confirmations: 1 }]
+	);
+	assert.strictEqual(await explorer.tipHeight(net), 19041);
+	const tx = await explorer.tx(net, txid);
+	assert.strictEqual(tx.txid, txid);
+	assert.strictEqual(tx.hex, '01000000');
+	assert.deepStrictEqual(JSON.parse(JSON.stringify(tx.vin)), []);
+	assert.deepStrictEqual(JSON.parse(JSON.stringify(tx.vout)), []);
+	assert.strictEqual((await explorer.outspend(net, txid, 0)).spent, false);
+	assert.strictEqual(await explorer.txHex(net, txid), '01000000');
+	assert.strictEqual((await explorer.broadcast(net, '01000000')).success, true);
+
+	reset(() => JSON.stringify({ ok: false, error: 'bad stone request' }));
+	await rejects(explorer.tipHeight(net), /bad stone request/i, 'STONE api error envelope');
+}
+
 async function testFailureIsolationAndCoalescing() {
 	const net = network('DGB', 'esplora');
 	let hits = 0;
@@ -220,6 +269,7 @@ const tests = [
 	['BlockCypher normalization', testBlockCypher],
 	['Blockchair prevout mapping', testBlockchair],
 	['Blockbook normalization and safe integers', testBlockbook],
+	['STONE wallet API normalization', testStoneApi],
 	['failure isolation and in-flight coalescing', testFailureIsolationAndCoalescing]
 ];
 

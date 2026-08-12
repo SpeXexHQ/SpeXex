@@ -4,7 +4,7 @@
  * Fork-specific service worker for the SpaceXpanse ROD wallet.
  */
 
-const STATIC_CACHE_VERSION = "spexex-static-v2.7.0-beta.0-brand-refresh-v1";
+const STATIC_CACHE_VERSION = "spexex-static-v2.7.0-beta.0-stone-wallet-v1";
 /* NOTE: cache.addAll() rejects the whole install if ANY entry 404s.
    The previous list referenced ./otc-test.html (removed from the repo),
    so the service worker never installed. It also omitted the OTC engine

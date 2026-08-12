@@ -134,6 +134,56 @@ function testDgbRoutingAndCsp() {
 		'service-worker cache must carry the current release identity');
 }
 
+function testStoneRoutingAndCsp() {
+	const registrySource = fs.readFileSync(path.join(root, 'js', 'chain-registry.js'), 'utf8');
+	const coinSource = fs.readFileSync(path.join(root, 'js', 'coin.js'), 'utf8');
+	const explorerSource = fs.readFileSync(path.join(root, 'js', 'otc-explorer.js'), 'utf8');
+	const headers = fs.readFileSync(path.join(root, '_headers'), 'utf8');
+
+	const registry = require(path.join(root, 'js', 'chain-registry.js'));
+	assert.strictEqual(registry.getProfile('STONE').swap.status, 'wallet-only',
+		'STONE must remain wallet-only without settlement attestation');
+	assert.strictEqual(registry.getProfile('STONE').api.type, 'stoneapi',
+		'STONE must use the reviewed Bloodstone wallet API adapter');
+	assert.strictEqual(registry.getProfile('STONE').api.base, 'https://bloodstone.rocks/stone-wallet-api',
+		'STONE must use the reviewed Bloodstone wallet API base');
+
+	const browser = {
+		console,
+		document: { location: { protocol: 'http:', hostname: 'localhost' } },
+		window: null
+	};
+	browser.window = browser;
+	vm.createContext(browser);
+	vm.runInContext(registrySource, browser, { filename: 'js/chain-registry.js' });
+	vm.runInContext(coinSource, browser, { filename: 'js/coin.js' });
+	vm.runInContext(explorerSource, browser, { filename: 'js/otc-explorer.js' });
+	browser.coinjs.setNetwork('STONE');
+	assert.strictEqual(browser.coinjs.explorer.isSupported(browser.coinjs.getNetwork()), true,
+		'coinjs.explorer.isSupported() must accept STONE');
+
+	let routedToStoneExplorer = false;
+	let normalizedBalance = null;
+	browser.coinjs.explorer.balance = function(network, address) {
+		return {
+			then(resolve) {
+				routedToStoneExplorer = network.code === 'STONE' && address === 'STONE-test-address';
+				resolve(500000000);
+			}
+		};
+	};
+	browser.coinjs.addressBalance('STONE-test-address', function(result) {
+		normalizedBalance = result;
+	});
+	assert.strictEqual(routedToStoneExplorer, true,
+		'coinjs.addressBalance() must dispatch STONE through the explorer adapter');
+	assert.strictEqual(normalizedBalance.data[0].balance, '5.00000000',
+		'STONE explorer base units must be normalized for the wallet display');
+
+	assert(/connect-src[^;\n]*https:\/\/bloodstone\.rocks/.test(headers),
+		'CSP must permit the Bloodstone wallet API host');
+}
+
 function runEngineWithSavedConfig(savedConfig, legacyConfig) {
 	const engineSource = fs.readFileSync(path.join(root, 'js', 'otc-engine.js'), 'utf8');
 	const values = {};
@@ -155,10 +205,11 @@ function runEngineWithSavedConfig(savedConfig, legacyConfig) {
 			networks: {
 				ROD: { apiBase: 'https://api.spacexpanse.org:1234' },
 				DGB: { apiBase: 'https://digiexplorer.info/api', apiType: 'esplora' },
+				STONE: { apiBase: 'https://bloodstone.rocks/stone-wallet-api', apiType: 'stoneapi' },
 				LTC: { apiBase: 'https://litecoinspace.org/api', apiType: 'esplora' },
 				DOGE: { apiBase: 'https://api.blockcypher.com/v1/doge/main', apiType: 'blockcypher' }
 			},
-			explorer: { drivers: { rod: {}, esplora: {}, blockcypher: {}, blockchair: {} } }
+			explorer: { drivers: { rod: {}, esplora: {}, blockcypher: {}, blockchair: {}, stoneapi: {} } }
 		}
 	};
 	browser.window = browser;
@@ -208,6 +259,7 @@ testDgbToRodRace();
 testLateRequestCannotHideNewLoader();
 testAddressChangeInvalidatesOldCallback();
 testDgbRoutingAndCsp();
+testStoneRoutingAndCsp();
 testV1ConfigIsolation();
 
-console.log('wallet balance, explorer, and v1-isolation regressions: 5/5 passed');
+console.log('wallet balance, explorer, and v1-isolation regressions: 6/6 passed');

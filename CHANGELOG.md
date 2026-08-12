@@ -11,8 +11,11 @@ The format is inspired by Keep a Changelog and follows Semantic Versioning princ
 
 ### Added
 
+- **Bloodstone / STONE wallet support.** [`js/chain-registry.js`](js/chain-registry.js) now exposes `STONE` as a wallet-visible registry profile using the reviewed public API base `https://bloodstone.rocks/stone-wallet-api`, while [`js/otc-explorer.js`](js/otc-explorer.js) adds a dedicated `stoneapi` adapter for balance, UTXO, transaction, height, and broadcast normalization. `STONE` remains **wallet-only** and is intentionally excluded from the OTC attested settlement matrix.
+
 ### Changed
 
+- **Bloodstone explorer normalization now matches the live wallet API contract.** [`js/otc-explorer.js`](js/otc-explorer.js) and [`electron/app/wallet/js/otc-explorer.js`](electron/app/wallet/js/otc-explorer.js) now accept the live `stoneapi` field names returned by [`/api/v1/address/<addr>/balance`](https://bloodstone.rocks/stone-wallet-api/api/v1/address/SYbHFYPKjqqieRjM57CjSr2zM18TJdBaww/balance) and [`/api/v1/address/<addr>/utxos`](https://bloodstone.rocks/stone-wallet-api/api/v1/address/SYbHFYPKjqqieRjM57CjSr2zM18TJdBaww/utxos), including `confirmed_sats`, `unconfirmed_sats`, `value_sats`, `script_pubkey`, and `height`. The adapter also now tolerates hex-only transaction responses from [`/api/v1/tx/<txid>`](https://bloodstone.rocks/stone-wallet-api/api/v1/tx/830afb1349ff1fdcd58efdaf3a71ed6aedde172c806c6faac1408b3a1c05ce99) instead of assuming expanded input/output JSON is always present.
 - **Electron desktop builds now include and auto-start the local loopback ROD RPC proxy helper.** [`electron/package.json`](electron/package.json) bundles [`tools/rod-rpc-cors-proxy.js`](tools/rod-rpc-cors-proxy.js) into app resources, [`electron/src/main.js`](electron/src/main.js) launches it through Electron's embedded Node on a loopback-only port during app startup and stops it on quit, [`electron/src/preload.js`](electron/src/preload.js) exposes only safe helper metadata to the renderer, and [`js/otc-engine.js`](js/otc-engine.js) uses that metadata to prefill OTC RPC defaults without disabling renderer security.
 
 ## [2.7.0-beta.0] - 2026-08-04
