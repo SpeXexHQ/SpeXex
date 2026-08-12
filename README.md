@@ -3,7 +3,7 @@
 
 # SpeXex
 
-Static browser-based SpaceXpanse ROD wallet, PWA shell, and experimental OTC swap client.
+Static browser-based web wallet, PWA shell, and experimental OTC swap client.
 
 ## Experimental disclaimer
 
