@@ -9,6 +9,10 @@ The format is inspired by Keep a Changelog and follows Semantic Versioning princ
 
 ## [Unreleased]
 
+### Added
+
+- **Bloodstone / STONE is now enabled for experimental OTC settlement proof.** [`js/chain-registry.js`](js/chain-registry.js) now exposes a complete registry-backed `STONE` settlement profile with conservative Bitcoin-style fees/policy, attestation vectors derived from the shipped secp256k1 fixture keys under Bloodstone version bytes, and refund defaults aligned to the engine's four-hour/one-hour wall-clock safety model. The browser/unit harness and full two-peer mock settlement matrix now discover `STONE` as an attested community-run route and can exercise it through the dedicated `stoneapi` mock backend in [`tests/harness/mock-infra.js`](tests/harness/mock-infra.js) and [`tests/harness/e2e-swap-test.js`](tests/harness/e2e-swap-test.js). This is an **experimental proof path**, not a claim of broader production settlement attestation beyond the in-repo harness.
+
 ### Fixed
 
 - **Switching the active coin now clears stale generated key/address artifacts before they can be mistaken for the new network.** [`js/coinbin.js`](js/coinbin.js) now invalidates previously generated New Address, New SegWit, multisig, timelocked, HD, and verify-result outputs on every active-chain switch while preserving user-entered source inputs. Open-wallet addresses still re-derive immediately for the newly selected chain, and non-SegWit chains such as DOGE now disable SegWit generation outputs instead of leaving stale values visible.
