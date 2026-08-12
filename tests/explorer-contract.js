@@ -214,7 +214,8 @@ async function testStoneApi() {
 			});
 		}
 		if (url.endsWith('/api/v1/broadcast') && method === 'POST') {
-			assert.strictEqual(JSON.parse(options.body).hex, '01000000');
+			assert.strictEqual(options.body, '01000000');
+			assert.strictEqual(options.contentType, 'text/plain');
 			return JSON.stringify({ ok: true, txid });
 		}
 		throw new Error('unexpected STONE API request ' + method + ' ' + url);
