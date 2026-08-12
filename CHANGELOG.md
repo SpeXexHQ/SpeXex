@@ -9,6 +9,10 @@ The format is inspired by Keep a Changelog and follows Semantic Versioning princ
 
 ## [Unreleased]
 
+### Fixed
+
+- **Switching the active coin now clears stale generated key/address artifacts before they can be mistaken for the new network.** [`js/coinbin.js`](js/coinbin.js) now invalidates previously generated New Address, New SegWit, multisig, timelocked, HD, and verify-result outputs on every active-chain switch while preserving user-entered source inputs. Open-wallet addresses still re-derive immediately for the newly selected chain, and non-SegWit chains such as DOGE now disable SegWit generation outputs instead of leaving stale values visible.
+
 ## [2.7.1-beta.0] - 2026-08-12
 
 ### Added

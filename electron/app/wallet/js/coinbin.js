@@ -339,6 +339,42 @@ return typeof value === "string" && value !== "1";
 		});
 	}
 
+	function setNewSegwitUiState(){
+		var segwitCapable = !coinjs.supportsSegwit || coinjs.supportsSegwit();
+		$('#newSegWitKeysBtn, #newSegwitPaperwalletBtn, #newSegWitBech32addr').prop('disabled', !segwitCapable);
+		$('#newSegWitStatus').remove();
+		if(!segwitCapable){
+			$('<div id="newSegWitStatus" class="alert alert-info" style="margin-top:10px;"><span class="glyphicon glyphicon-info-sign"></span> SegWit address generation is not available for the active chain.</div>')
+				.insertBefore('#newSegWitAddress');
+		}
+	}
+
+	function invalidateGeneratedNetworkArtifacts(){
+		$('#newBitcoinAddress, #newPubKey, #newPrivKey, #newPrivKeyEnc').val('');
+		$('#aes256wifkey, #aes256passStatus').addClass('hidden');
+
+		$('#newSegWitAddress, #newSegWitRedeemScript, #newSegWitPubKey, #newSegWitPrivKey').val('');
+		setNewSegwitUiState();
+
+		$('#multiSigData').removeClass('show').addClass('hidden').hide();
+		$('#multiSigData .address, #multiSigData .script, #multiSigData .scriptUrl').val('');
+		$('#multiSigErrorMsg').hide().html('');
+
+		$('#timeLockedData').removeClass('show').addClass('hidden').hide();
+		$('#timeLockedData .address, #timeLockedData .script, #timeLockedData .scriptUrl').val('');
+		$('#timeLockedErrorMsg').hide().html('');
+
+		$('#newHDxpub, #newHDxprv').val('');
+
+		$('.verifyData').addClass('hidden');
+		$('#verifyStatus').hide();
+		$('#verifyRsDataMultisig table tbody, #verifyTransactionData .ins tbody, #verifyTransactionData .outs tbody, #verifyHDaddress .derived_data table tbody').html('');
+		$('#verifyRsDataMultisig .multisigAddress, #verifyRsDataSegWit .segWitAddress, #verifyRsDataHodl .address, #verifyRsDataHodl .pubkey, #verifyRsDataHodl .date, #verifyPrivKey .address, #verifyPrivKey .pubkey, #verifyPrivKey .privkey, #verifyPubKey .address, #verifyPubKey .addressSegWit, #verifyPubKey .addressSegWitRedeemScript, #verifyPubKey .addressBech32, #verifyPubKey .addressBech32RedeemScript, #verifyHDaddress .chain_code, #verifyHDaddress .depth, #verifyHDaddress .version, #verifyHDaddress .child_index, #verifyHDaddress .hdwifkey, #verifyTransactionData .transactionVersion, #verifyTransactionData .transactionSize, #verifyTransactionData .transactionLockTime').val('');
+		$('#verifyPrivKey .iscompressed, #verifyHDaddress .hdKey, #verifyHDaddress .key_type').html('');
+		$('#verifyTransactionData .transactionRBF, #verifyTransactionData .transactionSegWit').hide();
+		$('.verifyLink').attr('href', '?verify=');
+	}
+
 	function applyActiveCoin(coin, options){
 		var opts = options || {};
 		var c = normalizeCoinCode(coin);
@@ -366,6 +402,7 @@ return typeof value === "string" && value !== "1";
 
 		syncExplorersFromNetwork();
 		refreshSiteCoinLabels();
+		invalidateGeneratedNetworkArtifacts();
 		if($('#chainInfo').hasClass('active')) renderChainInfo(c);
 
 		/* Keep settings panel fields in sync */
@@ -1404,6 +1441,10 @@ return typeof value === "string" && value !== "1";
 
 	/* new -> segwit code */
 	$("#newSegWitKeysBtn").click(function(){
+		if(coinjs.supportsSegwit && !coinjs.supportsSegwit()){
+			invalidateGeneratedNetworkArtifacts();
+			return;
+		}
 		var compressed = coinjs.compressed;
 		coinjs.compressed = true;
 		if(!brainwalletWarningsAcknowledged("#newSegWitBrainwallet")){

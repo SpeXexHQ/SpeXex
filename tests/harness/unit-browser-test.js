@@ -202,8 +202,8 @@ async function main() {
 			JSON.stringify(chainInfo.attestedMenuCodes) === JSON.stringify(chainInfo.expectedAttestedMenuCodes) &&
 				JSON.stringify(chainInfo.hostedMenuCodes) === JSON.stringify(['ROD']) &&
 				JSON.stringify(chainInfo.communityMenuCodes) === JSON.stringify(['DOGE', 'LTC']) &&
-				JSON.stringify(chainInfo.mainWalletOnlyCodes) === JSON.stringify(['BCH', 'BTC', 'DGB']) &&
-				JSON.stringify(chainInfo.chainWalletOnlyCodes) === JSON.stringify(['BCH', 'BTC', 'DGB']) &&
+				JSON.stringify(chainInfo.mainWalletOnlyCodes) === JSON.stringify(['BCH', 'BTC', 'DGB', 'STONE']) &&
+				JSON.stringify(chainInfo.chainWalletOnlyCodes) === JSON.stringify(['BCH', 'BTC', 'DGB', 'STONE']) &&
 				chainInfo.communityMainColors.every((color) => color === 'rgb(57, 169, 255)') &&
 				chainInfo.communityChainColors.every((color) => color === 'rgb(57, 169, 255)') &&
 				chainInfo.hostedMainColors.every((color) => color === 'rgb(71, 209, 108)') &&
@@ -255,6 +255,80 @@ async function main() {
 				activeWalletIdentity.activeAddress === activeWalletIdentity.dogeAddress &&
 				activeWalletIdentity.rodControlAddress === activeWalletIdentity.rodAddress,
 			JSON.stringify(activeWalletIdentity)
+		);
+
+		const generatedArtifactReset = await page.evaluate(() => {
+			window.spexSetActiveCoin('ROD');
+			$('#captcha').val('2');
+			$('#openEmail').val('artifact-reset@example.com');
+			$('#openPass, #openPassConfirm').val('StrongBrowserGate1!');
+			$('#openWalletRiskAcknowledgement').prop('checked', true);
+			$('#openBtn').trigger('click');
+			const rodWalletAddress = $.trim($('#walletAddress').text());
+
+			$('#newKeysBtn').trigger('click');
+			$('#newSegWitKeysBtn').trigger('click');
+			$('#newHDKeysBtn').trigger('click');
+			$('#verifyScript').val($('#newPrivKey').val());
+			$('#verifyBtn').trigger('click');
+			const before = {
+				newAddress: $('#newBitcoinAddress').val(),
+				newPubKey: $('#newPubKey').val(),
+				newPrivKey: $('#newPrivKey').val(),
+				newSegwitAddress: $('#newSegWitAddress').val(),
+				newSegwitRedeemScript: $('#newSegWitRedeemScript').val(),
+				newHDxpub: $('#newHDxpub').val(),
+				verifyPrivKeyVisible: !$('#verifyPrivKey').hasClass('hidden'),
+				verifyAddress: $('#verifyPrivKey .address').val()
+			};
+
+			window.spexSetActiveCoin('LTC');
+			const afterLtc = {
+				walletAddress: $.trim($('#walletAddress').text()),
+				newAddress: $('#newBitcoinAddress').val(),
+				newPubKey: $('#newPubKey').val(),
+				newPrivKey: $('#newPrivKey').val(),
+				newSegwitAddress: $('#newSegWitAddress').val(),
+				newSegwitRedeemScript: $('#newSegWitRedeemScript').val(),
+				newHDxpub: $('#newHDxpub').val(),
+				verifyPrivKeyVisible: !$('#verifyPrivKey').hasClass('hidden'),
+				verifyAddress: $('#verifyPrivKey .address').val(),
+				verifyScript: $('#verifyScript').val(),
+				segwitDisabled: $('#newSegWitKeysBtn').prop('disabled')
+			};
+
+			window.spexSetActiveCoin('DOGE');
+			$('#newSegWitKeysBtn').trigger('click');
+			const afterDoge = {
+				walletAddress: $.trim($('#walletAddress').text()),
+				segwitDisabled: $('#newSegWitKeysBtn').prop('disabled'),
+				segwitAddress: $('#newSegWitAddress').val(),
+				segwitRedeemScript: $('#newSegWitRedeemScript').val(),
+				segwitStatus: $('#newSegWitStatus').text()
+			};
+
+			$('#walletLogout').trigger('click');
+			window.spexSetActiveCoin('ROD');
+			return { rodWalletAddress, before, afterLtc, afterDoge };
+		});
+		step(
+			'generated network-bound address, SegWit, HD, and verify outputs are invalidated on coin switch while the open wallet re-derives',
+			generatedArtifactReset.before.newAddress && generatedArtifactReset.before.newPubKey && generatedArtifactReset.before.newPrivKey &&
+				generatedArtifactReset.before.newSegwitAddress && generatedArtifactReset.before.newSegwitRedeemScript &&
+				generatedArtifactReset.before.newHDxpub && generatedArtifactReset.before.verifyPrivKeyVisible &&
+				generatedArtifactReset.before.verifyAddress &&
+				generatedArtifactReset.afterLtc.walletAddress && generatedArtifactReset.afterLtc.walletAddress !== generatedArtifactReset.rodWalletAddress &&
+				generatedArtifactReset.afterLtc.newAddress === '' && generatedArtifactReset.afterLtc.newPubKey === '' && generatedArtifactReset.afterLtc.newPrivKey === '' &&
+				generatedArtifactReset.afterLtc.newSegwitAddress === '' && generatedArtifactReset.afterLtc.newSegwitRedeemScript === '' &&
+				generatedArtifactReset.afterLtc.newHDxpub === '' &&
+				generatedArtifactReset.afterLtc.verifyPrivKeyVisible === false && generatedArtifactReset.afterLtc.verifyAddress === '' &&
+				generatedArtifactReset.afterLtc.verifyScript === generatedArtifactReset.before.newPrivKey &&
+				generatedArtifactReset.afterLtc.segwitDisabled === false &&
+				generatedArtifactReset.afterDoge.walletAddress && generatedArtifactReset.afterDoge.walletAddress !== generatedArtifactReset.afterLtc.walletAddress &&
+				generatedArtifactReset.afterDoge.segwitDisabled === true &&
+				generatedArtifactReset.afterDoge.segwitAddress === '' && generatedArtifactReset.afterDoge.segwitRedeemScript === '' &&
+				/SegWit address generation is not available/.test(generatedArtifactReset.afterDoge.segwitStatus),
+			JSON.stringify(generatedArtifactReset)
 		);
 
 		const settingsRegistry = await page.evaluate(() => {
