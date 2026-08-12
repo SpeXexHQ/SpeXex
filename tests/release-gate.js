@@ -11,6 +11,8 @@ const root = path.resolve(process.env.APP_DIR || path.join(__dirname, '..'));
 const chainRegistry = require(path.join(root, 'js', 'chain-registry.js'));
 const results = [];
 const releaseInventoryDirectories = new Set(['css', 'fonts', 'images', 'js', 'tools']);
+const textReleaseExtensions = new Set(['.bat', '.css', '.html', '.js', '.json', '.md', '.sh', '.svg', '.webmanifest']);
+const textReleaseFiles = new Set(['.gitattributes', '.gitignore', '_headers', 'LICENSE', 'LICENSE-APACHE']);
 
 function check(name, fn) {
 	try {
@@ -51,6 +53,12 @@ function walk(directory, predicate) {
 		else if (!predicate || predicate(absolute)) output.push(absolute);
 	}
 	return output;
+}
+
+function checksumBytes(relativePath) {
+	const bytes = fs.readFileSync(path.join(root, relativePath));
+	if (!textReleaseFiles.has(relativePath) && !textReleaseExtensions.has(path.extname(relativePath))) return bytes;
+	return Buffer.from(bytes.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
 }
 
 function objectLiteralBody(source, marker) {
@@ -134,6 +142,7 @@ if (process.env.SKIP_RELEASE_INTEGRITY !== '1') {
 			return inReleaseInventory(relative) &&
 				relative !== 'SHA256SUMS' &&
 				relative !== 'sha1sum' &&
+				relative !== 'fast-gate.log' &&
 				!/^tests\/harness\/e2e-report-.*\.json$/.test(relative);
 		}).map((file) => path.relative(root, file).replace(/\\/g, '/')).sort();
 		assert.deepStrictEqual([...entries.keys()].sort(), files,
@@ -141,7 +150,7 @@ if (process.env.SKIP_RELEASE_INTEGRITY !== '1') {
 
 		for (const relative of files) {
 			const digest = crypto.createHash('sha256')
-				.update(fs.readFileSync(path.join(root, relative)))
+				.update(checksumBytes(relative))
 				.digest('hex');
 			assert.strictEqual(entries.get(relative), digest,
 				'SHA-256 mismatch for ' + relative);

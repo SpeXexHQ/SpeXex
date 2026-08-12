@@ -8,6 +8,8 @@ const path = require('path');
 const root = path.resolve(__dirname, '..');
 const manifestName = 'SHA256SUMS';
 const releaseDirectories = new Set(['css', 'fonts', 'images', 'js', 'tools']);
+const textReleaseExtensions = new Set(['.bat', '.css', '.html', '.js', '.json', '.md', '.sh', '.svg', '.webmanifest']);
+const textReleaseFiles = new Set(['.gitattributes', '.gitignore', '_headers', 'LICENSE', 'LICENSE-APACHE']);
 
 function inReleaseInventory(relativePath) {
 	const normalized = relativePath.replace(/\\/g, '/');
@@ -20,9 +22,16 @@ function excluded(relativePath) {
 	return !inReleaseInventory(normalized) ||
 		normalized === manifestName ||
 		normalized === 'sha1sum' ||
+		normalized === 'fast-gate.log' ||
 		normalized.startsWith('.git/') ||
 		normalized.includes('/node_modules/') ||
 		/^tests\/harness\/e2e-report-.*\.json$/.test(normalized);
+}
+
+function checksumBytes(relativePath) {
+	const bytes = fs.readFileSync(path.join(root, relativePath));
+	if (!textReleaseFiles.has(relativePath) && !textReleaseExtensions.has(path.extname(relativePath))) return bytes;
+	return Buffer.from(bytes.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
 }
 
 function walk(directory) {
@@ -39,7 +48,7 @@ function walk(directory) {
 
 const lines = walk(root).sort().map((relativePath) => {
 	const digest = crypto.createHash('sha256')
-		.update(fs.readFileSync(path.join(root, relativePath)))
+		.update(checksumBytes(relativePath))
 		.digest('hex');
 	return `${digest}  ${relativePath}`;
 });
