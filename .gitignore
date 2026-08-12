@@ -8,7 +8,7 @@ release/
 docs/maintainer-wiki
 docs/*.md
 *screenshot*
-#test*
+test/*
 *.log
 tmp/
 temp/
