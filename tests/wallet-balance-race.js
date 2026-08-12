@@ -29,6 +29,19 @@ function extractFunction(functionName) {
 
 const factorySource = extractFunction('createWalletBalanceRequestEpoch');
 const createEpoch = vm.runInNewContext('(' + factorySource + ')');
+const sanitizeApiSettingsSource = extractFunction('sanitizeSavedApiSettings');
+const sanitizeSavedApiSettings = vm.runInNewContext('(' + sanitizeApiSettingsSource + ')', {
+	window: { spexChainRegistry: require(path.join(root, 'js', 'chain-registry.js')) },
+	coinjs: { networks: require(path.join(root, 'js', 'chain-registry.js')).walletNetworks() },
+	$: {
+		extend(target) {
+			for (let i = 1; i < arguments.length; i++) {
+				if (arguments[i]) Object.assign(target, arguments[i]);
+			}
+			return target;
+		}
+	}
+});
 
 function testDgbToRodRace() {
 	const requests = createEpoch();
@@ -130,13 +143,14 @@ function testDgbRoutingAndCsp() {
 		'wallet API settings must migrate the old shipped DGB default');
 	assert(!/rodOtcEngineConfig|altChains|rodApiUrl/.test(engineSource),
 		'v2 OTC engine must not read or migrate the old configuration schema');
-	assert(/STATIC_CACHE_VERSION\s*=\s*"[^"]*2\.7\.0-beta\.0/.test(serviceWorker),
+	assert(/STATIC_CACHE_VERSION\s*=\s*"[^"]*2\.7\.1-beta\.0/.test(serviceWorker),
 		'service-worker cache must carry the current release identity');
 }
 
 function testStoneRoutingAndCsp() {
 	const registrySource = fs.readFileSync(path.join(root, 'js', 'chain-registry.js'), 'utf8');
 	const coinSource = fs.readFileSync(path.join(root, 'js', 'coin.js'), 'utf8');
+	const coinbinSource = fs.readFileSync(path.join(root, 'js', 'coinbin.js'), 'utf8');
 	const explorerSource = fs.readFileSync(path.join(root, 'js', 'otc-explorer.js'), 'utf8');
 	const headers = fs.readFileSync(path.join(root, '_headers'), 'utf8');
 
@@ -147,6 +161,8 @@ function testStoneRoutingAndCsp() {
 		'STONE must use the reviewed Bloodstone wallet API adapter');
 	assert.strictEqual(registry.getProfile('STONE').api.base, 'https://bloodstone.rocks/stone-wallet-api',
 		'STONE must use the reviewed Bloodstone wallet API base');
+	assert.strictEqual(registry.walletNetworks().STONE.walletFeeRatePerByte, 150,
+		'STONE wallet sends must honor the Bloodstone relay floor');
 
 	const browser = {
 		console,
@@ -161,6 +177,8 @@ function testStoneRoutingAndCsp() {
 	browser.coinjs.setNetwork('STONE');
 	assert.strictEqual(browser.coinjs.explorer.isSupported(browser.coinjs.getNetwork()), true,
 		'coinjs.explorer.isSupported() must accept STONE');
+	assert.strictEqual(browser.coinjs.getNetwork().walletFeeRatePerByte, 150,
+		'compiled wallet network must expose the STONE relay floor');
 
 	let routedToStoneExplorer = false;
 	let normalizedBalance = null;
@@ -182,6 +200,35 @@ function testStoneRoutingAndCsp() {
 
 	assert(/connect-src[^;\n]*https:\/\/bloodstone\.rocks/.test(headers),
 		'CSP must permit the Bloodstone wallet API host');
+	assert(/id="spendAmountUnit"/.test(fs.readFileSync(path.join(root, 'index.html'), 'utf8')),
+		'wallet confirmation modal must render the active coin unit dynamically');
+	assert(!/\$\("#modalWalletConfirm"\)\.modal\('hide'\);/.test(coinbinSource),
+		'broadcast failures must keep the wallet confirmation modal open');
+	assert(!/updateApiServerStatus\(\{online: true, url: ''\}\);/.test(coinbinSource),
+		'network switching must not clear unrelated API outage warnings');
+	assert(/var rodApiBase = \(rodNetwork && rodNetwork\.apiBase\) \|\| coinjs\.rodApi;/.test(coinSource),
+		'ROD health checks must resolve the canonical ROD API base explicitly');
+	assert(/else if\(coinjs\.networks && coinjs\.networks\.ROD && coinjs\.networks\.ROD\.apiBase\)\{/.test(coinSource),
+		'non-ROD network switches must restore the canonical ROD API base for health checks');
+}
+
+function testSavedApiSettingsSanitization() {
+	const registry = require(path.join(root, 'js', 'chain-registry.js'));
+	const cleaned = sanitizeSavedApiSettings({
+		STONE: { apiUrl: 'https://api.spacexpanse.org:1234', apiType: 'stoneapi' },
+		ROD: { apiUrl: 'https://bloodstone.rocks/stone-wallet-api/api/v1', apiType: 'esplora' }
+	});
+	assert.strictEqual(cleaned.STONE.apiType, 'stoneapi',
+		'STONE must keep the stoneapi driver even with stale saved settings');
+	assert.strictEqual(cleaned.STONE.apiUrl, registry.getProfile('STONE').api.base,
+		'STONE must discard a saved ROD API base that would trigger method-not-found errors');
+	assert.strictEqual(cleaned.ROD.apiType, 'rod',
+		'ROD must keep the rod driver even with stale saved settings');
+	assert.strictEqual(cleaned.ROD.apiUrl, registry.getProfile('ROD').api.base,
+		'ROD must discard a saved STONE API base or subpath that would trigger method-not-found errors');
+	const explorerSource = fs.readFileSync(path.join(root, 'js', 'otc-explorer.js'), 'utf8');
+	assert(/postRaw\(base \+ '\/api\/v1\/broadcast', txhex, 'text\/plain'\)/.test(explorerSource),
+		'STONE broadcast must avoid the broken JSON preflight by posting raw tx hex as text/plain');
 }
 
 function runEngineWithSavedConfig(savedConfig, legacyConfig) {
@@ -260,6 +307,7 @@ testLateRequestCannotHideNewLoader();
 testAddressChangeInvalidatesOldCallback();
 testDgbRoutingAndCsp();
 testStoneRoutingAndCsp();
+testSavedApiSettingsSanitization();
 testV1ConfigIsolation();
 
-console.log('wallet balance, explorer, and v1-isolation regressions: 6/6 passed');
+console.log('wallet balance, explorer, and v1-isolation regressions: 7/7 passed');

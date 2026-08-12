@@ -1,6 +1,6 @@
 {
   "name": "spexex-electron",
-  "version": "2.7.0-beta.0",
+  "version": "2.7.1-beta.0",
   "private": true,
   "description": "Electron wrapper for SpeXex, the static SpaceXpanse ROD wallet",
   "license": "Apache-2.0",

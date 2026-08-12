@@ -73,6 +73,8 @@
 		};
 		if(network.apiType === 'rod'){
 			coinjs.rodApi = network.apiBase;
+		} else if(coinjs.networks && coinjs.networks.ROD && coinjs.networks.ROD.apiBase){
+			coinjs.rodApi = coinjs.networks.ROD.apiBase;
 		}
 		if(window.jQuery){
 			jQuery(document).trigger('coinjsNetworkChanged', [network]);
@@ -101,16 +103,18 @@
 	};
 
 	coinjs.apiHealthCheck = function(callback){
-		coinjs.ajax(coinjs.rodApi+'/info', function(response){
+		var rodNetwork = coinjs.networks && coinjs.networks.ROD ? coinjs.networks.ROD : null;
+		var rodApiBase = (rodNetwork && rodNetwork.apiBase) || coinjs.rodApi;
+		coinjs.ajax(rodApiBase+'/info', function(response){
 			try {
 				var parsed = JSON.parse(response);
 				var isHealthy = !!parsed && !parsed.error;
-				coinjs.reportApiStatus(isHealthy, isHealthy ? '' : (parsed.error || 'ROD API server returned an error'), coinjs.rodApi+'/info', isHealthy ? 200 : 0);
+				coinjs.reportApiStatus(isHealthy, isHealthy ? '' : (parsed.error || 'ROD API server returned an error'), rodApiBase+'/info', isHealthy ? 200 : 0);
 				if(callback){
 					callback({'success': isHealthy, 'data': parsed});
 				}
 			} catch (error) {
-				coinjs.reportApiStatus(false, 'ROD API server returned an invalid health response', coinjs.rodApi+'/info', 0);
+				coinjs.reportApiStatus(false, 'ROD API server returned an invalid health response', rodApiBase+'/info', 0);
 				if(callback){
 					callback({'success': false, 'error': 'Invalid API health response'});
 				}

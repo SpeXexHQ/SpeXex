@@ -209,6 +209,9 @@
 				addr: 'https://bloodstone.rocks/explorer/address/',
 				block: 'https://bloodstone.rocks/explorer/block/'
 			},
+			wallet: {
+				relayFloorPerByte: 150
+			},
 			api: { type: 'stoneapi', base: 'https://bloodstone.rocks/stone-wallet-api', operator: 'community' },
 			swap: { status: 'wallet-only' }
 		},
@@ -482,6 +485,9 @@
 					apiType: profile.api.type,
 					apiBase: profile.api.base,
 					apiOperator: profile.api.operator,
+					walletFeeRatePerByte: (profile.wallet && positiveInteger(profile.wallet.relayFloorPerByte))
+						? profile.wallet.relayFloorPerByte
+						: ((profile.swap.status === 'attested' || profile.swap.status === 'certified') ? profile.swap.policy.relayFloorPerByte : 100),
 					routeStatus: routeStatusForChain(code),
 					swapStatus: profile.swap.status
 				};

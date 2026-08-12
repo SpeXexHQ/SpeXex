@@ -740,7 +740,12 @@
 			});
 		},
 		broadcast: function (base, txhex) {
-			return postRaw(base + '/api/v1/broadcast', JSON.stringify({ hex: txhex }), 'application/json').then(function (body) {
+			/* Bloodstone's POST response is CORS-enabled, but its OPTIONS preflight
+			   currently omits Access-Control-Allow-Origin. Sending the same JSON
+			   payload as a simple text/plain request keeps the request preflight-free.
+			   The live endpoint expects the raw transaction hex as the request body,
+			   not a JSON envelope. */
+			return postRaw(base + '/api/v1/broadcast', txhex, 'text/plain').then(function (body) {
 				var parsed;
 				try { parsed = JSON.parse(body); } catch (e) {
 					return { success: false, txid: '', error: body || 'Broadcast failed', raw: body };

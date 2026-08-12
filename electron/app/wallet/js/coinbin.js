@@ -323,6 +323,7 @@ return typeof value === "string" && value !== "1";
 		$('#walletActiveCoinLabel').text(net.name || unit);
 		$('#walletBalanceCoinTag').text(unit);
 		$('#walletSendCoinLabel').text(unit);
+		$('#spendAmountUnit').text(unit);
 		$('.js-coin-unit').text(unit);
 		$('.js-coin-name').text(net.name || unit);
 		document.title = net.name + ' Wallet by rod-web-wallet';
@@ -356,10 +357,12 @@ return typeof value === "string" && value !== "1";
 		var nextUnit = (coinjs.getNetwork && coinjs.getNetwork().unit) || c;
 		$("#walletBalance").html('0.00000000 '+nextUnit).attr('rel', 0);
 
-		/* Clear per-host API errors from the previous network so the banner
-		   does not stick when switching coins. */
-		_apiHostErrors = {};
-		updateApiServerStatus({online: true, url: ''});
+		/* Re-check the ROD control-plane/API health after every switch without
+		   clearing unrelated host failures. That preserves a real ROD outage
+		   warning while the user is viewing another wallet network. */
+		if(coinjs.apiHealthCheck){
+			coinjs.apiHealthCheck();
+		}
 
 		syncExplorersFromNetwork();
 		refreshSiteCoinLabels();
@@ -994,7 +997,6 @@ return typeof value === "string" && value !== "1";
 						$("#walletSendFailTransaction").removeClass('hidden');
 						$("#walletSendFailTransaction textarea").val(signed);
 						thisbtn.attr('disabled',false);
-						$("#modalWalletConfirm").modal('hide');
 						$("#walletSendBtn").attr('disabled',false);
 					}
 
@@ -1078,7 +1080,8 @@ return typeof value === "string" && value !== "1";
 	var walletFeeWasManuallyEdited = false;
 
 	function ensureWalletFeeMeetsRelayFloor(forceMinimumFee, estimatedInputCount){
-		var minimumSatPerByte = 100;
+		var network = coinjs.getNetwork ? coinjs.getNetwork() : null;
+		var minimumSatPerByte = (network && network.walletFeeRatePerByte) || 100;
 		var estimatedBytes = estimateWalletTransactionBytes(estimatedInputCount);
 		var minimumFeeSat = estimatedBytes * minimumSatPerByte;
 		var minimumFeeRod = (minimumFeeSat / 100000000);
@@ -2762,11 +2765,111 @@ function rawSubmitDefault(btn){
 		try { window.localStorage.setItem(API_SETTINGS_KEY, JSON.stringify(settings)); } catch (e) { /* ignore */ }
 	}
 
+	function sanitizeSavedApiSettings(settings) {
+		var sanitized = {};
+		var registry = window.spexChainRegistry;
+		var protectedApiTypeByCode = {
+			'ROD': true,
+			'STONE': true
+		};
+
+		function trimApiUrl(url) {
+			return String(url || '').replace(/\/+$/g, '');
+		}
+
+		function apiUrlForComparison(url, apiType) {
+			var trimmedUrl = trimApiUrl(url);
+			if (String(apiType || '') === 'stoneapi') {
+				trimmedUrl = trimmedUrl.replace(/\/api\/v1$/i, '');
+			}
+			return trimmedUrl;
+		}
+
+		function canonicalApiForCode(code) {
+			if (registry && typeof registry.getProfile === 'function') {
+				try {
+					var profile = registry.getProfile(code);
+					if (profile && profile.api) {
+						return {
+							base: trimApiUrl(profile.api.base),
+							type: profile.api.type
+						};
+					}
+				} catch (registryError) {
+					/* fall through to the mutable runtime network copy */
+				}
+			}
+
+			if (coinjs.networks && coinjs.networks[code]) {
+				return {
+					base: trimApiUrl(coinjs.networks[code].apiBase),
+					type: coinjs.networks[code].apiType
+				};
+			}
+
+			return null;
+		}
+
+		function conflictsWithCanonicalApi(code, apiUrl, apiType) {
+			var candidate = apiUrlForComparison(apiUrl, apiType);
+			if (!candidate) {
+				return false;
+			}
+
+			for (var otherCode in coinjs.networks) {
+				if (!coinjs.networks.hasOwnProperty(otherCode) || otherCode === code) {
+					continue;
+				}
+				var otherCanonicalApi = canonicalApiForCode(otherCode);
+				if (!otherCanonicalApi || !otherCanonicalApi.base) {
+					continue;
+				}
+				if (candidate === apiUrlForComparison(otherCanonicalApi.base, otherCanonicalApi.type) && String(otherCanonicalApi.type || '') !== String(apiType || '')) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		settings = settings || {};
+		for (var code in settings) {
+			if (!settings.hasOwnProperty(code) || !coinjs.networks[code]) {
+				continue;
+			}
+
+			var canonicalApi = canonicalApiForCode(code);
+			var entry = $.extend({}, settings[code]);
+			if (!canonicalApi) {
+				sanitized[code] = entry;
+				continue;
+			}
+
+			if (protectedApiTypeByCode[code]) {
+				entry.apiType = canonicalApi.type;
+				entry.apiUrl = canonicalApi.base;
+			} else if (!entry.apiType) {
+				entry.apiType = canonicalApi.type;
+			}
+
+			if (!protectedApiTypeByCode[code] && entry.apiUrl) {
+				entry.apiUrl = trimApiUrl(entry.apiUrl);
+				if (conflictsWithCanonicalApi(code, entry.apiUrl, entry.apiType)) {
+					delete entry.apiUrl;
+				}
+			}
+
+			sanitized[code] = entry;
+		}
+
+		return sanitized;
+	}
+
 	function populateApiServerFields() {
 		var $container = $('#settingsApiServers');
 		if (!$container.length) return;
 		$container.empty();
-		var saved = loadApiSettings();
+		var saved = sanitizeSavedApiSettings(loadApiSettings());
 		var driverOptions = [];
 		if (coinjs.explorer && coinjs.explorer.drivers) {
 			for (var d in coinjs.explorer.drivers) {
@@ -2804,6 +2907,7 @@ function rawSubmitDefault(btn){
 			settings[code] = settings[code] || {};
 			settings[code].apiType = $.trim($(this).val());
 		});
+		settings = sanitizeSavedApiSettings(settings);
 		/* Apply to live coinjs.networks */
 		for (var code in settings) {
 			if (settings.hasOwnProperty(code) && coinjs.networks[code]) {
@@ -2841,6 +2945,7 @@ function rawSubmitDefault(btn){
 	(function applySavedApiSettings() {
 		var saved = loadApiSettings();
 		var dirty = false;
+		var originalSavedJson = JSON.stringify(saved || {});
 
 		/* URLs that shipped as defaults in prior versions but no longer work.
 		   If the user never customised them, localStorage still holds these
@@ -2862,6 +2967,8 @@ function rawSubmitDefault(btn){
 			}
 		}
 
+		saved = sanitizeSavedApiSettings(saved);
+		if (JSON.stringify(saved || {}) !== originalSavedJson) dirty = true;
 		if (dirty) saveApiSettings(saved);
 
 		for (var c in saved) {
