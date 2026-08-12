@@ -155,14 +155,16 @@ function testStoneRoutingAndCsp() {
 	const headers = fs.readFileSync(path.join(root, '_headers'), 'utf8');
 
 	const registry = require(path.join(root, 'js', 'chain-registry.js'));
-	assert.strictEqual(registry.getProfile('STONE').swap.status, 'wallet-only',
-		'STONE must remain wallet-only without settlement attestation');
+	assert.strictEqual(registry.getProfile('STONE').swap.status, 'attested',
+		'STONE must expose the experimental settlement profile to the OTC engine');
 	assert.strictEqual(registry.getProfile('STONE').api.type, 'stoneapi',
 		'STONE must use the reviewed Bloodstone wallet API adapter');
 	assert.strictEqual(registry.getProfile('STONE').api.base, 'https://bloodstone.rocks/stone-wallet-api',
 		'STONE must use the reviewed Bloodstone wallet API base');
 	assert.strictEqual(registry.walletNetworks().STONE.walletFeeRatePerByte, 150,
 		'STONE wallet sends must honor the Bloodstone relay floor');
+	assert.deepStrictEqual(registry.getProfile('STONE').swap.refundBlocks, { asset: 120, payment: 30 },
+		'STONE settlement defaults must preserve the shared four-hour/one-hour wall-clock windows');
 
 	const browser = {
 		console,
@@ -256,7 +258,7 @@ function runEngineWithSavedConfig(savedConfig, legacyConfig) {
 				LTC: { apiBase: 'https://litecoinspace.org/api', apiType: 'esplora' },
 				DOGE: { apiBase: 'https://api.blockcypher.com/v1/doge/main', apiType: 'blockcypher' }
 			},
-			explorer: { drivers: { rod: {}, esplora: {}, blockcypher: {}, blockchair: {}, stoneapi: {} } }
+			explorer: { drivers: { rod: {}, esplora: {}, blockcypher: {}, blockchair: {}, blockbook: {}, stoneapi: {} } }
 		}
 	};
 	browser.window = browser;

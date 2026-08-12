@@ -39,7 +39,7 @@ const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 const CHAIN_REGISTRY = require('../../js/chain-registry.js');
-const { MockChain, rodApiServer, esploraServer, blockcypherServer, blockchairServer, nostrRelay, staticServer } = require('./mock-infra');
+const { MockChain, rodApiServer, esploraServer, blockcypherServer, blockchairServer, stoneapiServer, nostrRelay, staticServer } = require('./mock-infra');
 
 const APP_DIR = process.env.APP_DIR || path.resolve(__dirname, '..', '..');
 const SCENARIO = process.env.SCENARIO || 'happy';
@@ -65,9 +65,10 @@ const MOCK_SERVER_BY_API_TYPE = {
   rod: rodApiServer,
   esplora: esploraServer,
   blockcypher: blockcypherServer,
-  blockchair: blockchairServer
+  blockchair: blockchairServer,
+  stoneapi: stoneapiServer
 };
-const MOCK_API_PATH_BY_TYPE = { rod: '', esplora: '/api', blockcypher: '', blockchair: '' };
+const MOCK_API_PATH_BY_TYPE = { rod: '', esplora: '/api', blockcypher: '', blockchair: '', stoneapi: '' };
 
 function decimalToBaseUnits(value) {
   const parts = String(value).split('.');
@@ -139,6 +140,7 @@ function expectedTransientApiResponse(urlValue, status) {
   const url = new URL(urlValue);
   if (url.hostname !== '127.0.0.1' || ![PORTS.asset, PORTS.alt].includes(Number(url.port))) return false;
   return /^\/api\/tx\/[0-9a-f]{64}(?:\/hex)?$/i.test(url.pathname) ||
+    /^\/api\/v1\/tx\/[0-9a-f]{64}$/i.test(url.pathname) ||
     /^\/txs\/[0-9a-f]{64}$/i.test(url.pathname);
 }
 

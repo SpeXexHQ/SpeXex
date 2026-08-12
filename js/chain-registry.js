@@ -190,7 +190,7 @@
 			shortName: 'Bloodstone',
 			unit: 'STONE',
 			uriPrefix: 'bloodstone',
-			description: 'Bloodstone is a Bitcoin-derived UTXO cryptocurrency with public wallet API support at bloodstone.rocks. This build currently exposes wallet, explorer, and transaction tooling only.',
+			description: 'Bloodstone is a Bitcoin-derived UTXO cryptocurrency with public wallet API support at bloodstone.rocks. This build now ships an experimental registry-backed OTC settlement profile for in-repo proof and harness validation.',
 			website: 'https://bloodstone.rocks',
 			documentation: 'https://bloodstone.rocks/stone-wallet-api',
 			repositories: [
@@ -213,7 +213,34 @@
 				relayFloorPerByte: 150
 			},
 			api: { type: 'stoneapi', base: 'https://bloodstone.rocks/stone-wallet-api', operator: 'community' },
-			swap: { status: 'wallet-only' }
+			swap: {
+				status: 'attested',
+				transactionModel: 'bitcoin-utxo',
+				curve: 'secp256k1',
+				signature: 'ecdsa',
+				transactionFormat: 'bitcoin',
+				escrow: 'p2sh-2of2',
+				sighash: 'legacy-all',
+				timelock: 'nlocktime-height',
+				decimals: 8,
+				blockSeconds: 120,
+				refundBlocks: { asset: 120, payment: 30 },
+				confirmations: 6,
+				fees: { claim: '0.00051900', refund: '0.00051900', funding: '0.00051900' },
+				policy: {
+					feeRatePerByte: 150,
+					relayFloorPerByte: 150,
+					hardDustSats: 546,
+					softDustSats: 0,
+					dustSurchargeSats: 0,
+					changeThresholdSats: 546
+				},
+				attestation: {
+					testAmount: '0.05000000',
+					p2pkhVector: 'SXyGazfm6S3xfcySmD6QNkZYmtfysC2jvc',
+					p2sh2of2Vector: 'sKynw1attrhoCu6Er4PKm5rW9xNJwonXiH'
+				}
+			}
 		},
 		BTC: {
 			code: 'BTC',

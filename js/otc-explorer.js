@@ -657,8 +657,8 @@
 			var output = voutSource[j] || {};
 			vout.push({
 				n: toInt(stoneField(output, ['n', 'vout', 'index'], j), j),
-				value: baseUnits(stoneField(output, ['value', 'amount', 'satoshis'], 0)),
-				scriptpubkey: stoneField(output, ['scriptpubkey', 'scriptPubKey', 'script'], ''),
+				value: baseUnits(stoneField(output, ['value_sats', 'value', 'amount', 'satoshis'], 0)),
+				scriptpubkey: stoneField(output, ['script_pubkey', 'scriptpubkey', 'scriptPubKey', 'script'], ''),
 				scriptpubkey_address: stoneField(output, ['scriptpubkey_address', 'address'], ''),
 				spent_by: stoneField(output, ['spent_by', 'spentBy', 'spent_txid', 'spentTxId'], '')
 			});

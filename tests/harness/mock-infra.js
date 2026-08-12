@@ -5,6 +5,7 @@
  *  - rodApiServer: mimics api.spacexpanse.org:1234 (sats everywhere:
  *    /unspent, /balance, /transaction — confirmed via live API probe)
  *  - esploraServer: mimics litecoinspace.org/api (sats everywhere)
+ *  - stoneapiServer: mimics bloodstone.rocks/stone-wallet-api (sats everywhere)
  *  - nostrRelay: minimal NIP-01 relay over ws://
  */
 'use strict';
@@ -678,6 +679,104 @@ function blockchairServer(chain, port) {
   return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve(server)));
 }
 
+function stoneapiServer(chain, port) {
+	const server = http.createServer(async (req, res) => {
+		if (req.method === 'OPTIONS') return sendText(res, '');
+		const url = new URL(req.url, 'http://x');
+		const parts = url.pathname.split('/').filter(Boolean);
+
+		if (parts[0] !== 'api' || parts[1] !== 'v1') return sendJson(res, { ok: false, error: 'not found' }, 404);
+
+		if (parts[2] === 'height' && parts.length === 3) {
+			return sendJson(res, { ok: true, data: { height: chain.height } });
+		}
+
+		if (parts[2] === 'address' && parts[4] === 'balance' && parts.length === 5) {
+			const address = decodeURIComponent(parts[3]);
+			const balance = chain.balance(address);
+			return sendJson(res, {
+				ok: true,
+				data: {
+					address: address,
+					confirmed_sats: balance,
+					unconfirmed_sats: 0,
+					total_sats: balance
+				}
+			});
+		}
+
+		if (parts[2] === 'address' && parts[4] === 'utxos' && parts.length === 5) {
+			const address = decodeURIComponent(parts[3]);
+			return sendJson(res, {
+				ok: true,
+				data: chain.utxosForAddress(address).map((u) => ({
+					txid: u.txid,
+					vout: u.vout,
+					value_sats: u.value,
+					script_pubkey: u.script.toString('hex'),
+					height: chain.height,
+					confirmations: 1
+				}))
+			});
+		}
+
+		if (parts[2] === 'tx' && parts.length === 4 && req.method === 'GET') {
+			const txid = decodeURIComponent(parts[3]);
+			const rec = chain.txs.get(txid);
+			if (!rec) return sendJson(res, { ok: false, error: 'Transaction not found' }, 404);
+			chain.spenders = chain.spenders || new Map();
+			const vin = rec.tx
+				? rec.tx.ins.map((input) => ({
+					txid: Buffer.from(input.hash).reverse().toString('hex'),
+					vout: input.index,
+					scriptSig: Buffer.from(input.script).toString('hex'),
+					sequence: input.sequence,
+					value: 0,
+					address: ''
+				}))
+				: [];
+			const vout = rec.vouts.map((output, index) => {
+				const spentBy = chain.spenders.get(txid + ':' + index) || '';
+				return {
+					n: index,
+					value_sats: output.value,
+					script_pubkey: output.script.toString('hex'),
+					address: output.address || '',
+					spent_by: spentBy
+				};
+			});
+			return sendJson(res, {
+				ok: true,
+				data: {
+					txid: txid,
+					hex: rec.hex || '',
+					version: rec.tx ? rec.tx.version : 1,
+					locktime: rec.tx ? rec.tx.locktime : 0,
+					size: rec.hex ? rec.hex.length / 2 : 0,
+					fee: 0,
+					confirmations: chain.confirmationsOf(txid),
+					height: rec.acceptedAtHeight || chain.height,
+					vin: vin,
+					vout: vout
+				}
+			});
+		}
+
+		if (parts[2] === 'broadcast' && parts.length === 3 && req.method === 'POST') {
+			const hex = (await readBody(req)).trim();
+			const result = chain.validateAndAccept(hex);
+			if (!result.ok) {
+				chain.broadcasts.push({ txid: '', hex, valid: false, details: [result.error] });
+				return sendJson(res, { ok: false, error: result.error }, 400);
+			}
+			return sendJson(res, { ok: true, txid: result.txid, data: { txid: result.txid } });
+		}
+
+		return sendJson(res, { ok: false, error: 'not found' }, 404);
+	});
+	return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve(server)));
+}
+
 /* Minimal NIP-01 relay */
 function nostrRelay(port) {
   const events = [];
@@ -749,4 +848,4 @@ function staticServer(rootDir, port) {
   return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve(server)));
 }
 
-module.exports = { MockChain, rodApiServer, esploraServer, blockcypherServer, blockchairServer, nostrRelay, staticServer, addressToScript, CHAIN_VERSIONS, CHAIN_POLICY };
+module.exports = { MockChain, rodApiServer, esploraServer, blockcypherServer, blockchairServer, stoneapiServer, nostrRelay, staticServer, addressToScript, CHAIN_VERSIONS, CHAIN_POLICY };

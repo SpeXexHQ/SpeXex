@@ -201,9 +201,9 @@ async function main() {
 			'route ownership colors, wallet-only icons, and background-only active state are distinct',
 			JSON.stringify(chainInfo.attestedMenuCodes) === JSON.stringify(chainInfo.expectedAttestedMenuCodes) &&
 				JSON.stringify(chainInfo.hostedMenuCodes) === JSON.stringify(['ROD']) &&
-				JSON.stringify(chainInfo.communityMenuCodes) === JSON.stringify(['DOGE', 'LTC']) &&
-				JSON.stringify(chainInfo.mainWalletOnlyCodes) === JSON.stringify(['BCH', 'BTC', 'DGB', 'STONE']) &&
-				JSON.stringify(chainInfo.chainWalletOnlyCodes) === JSON.stringify(['BCH', 'BTC', 'DGB', 'STONE']) &&
+				JSON.stringify(chainInfo.communityMenuCodes) === JSON.stringify(['DOGE', 'LTC', 'STONE']) &&
+				JSON.stringify(chainInfo.mainWalletOnlyCodes) === JSON.stringify(['BCH', 'BTC', 'DGB']) &&
+				JSON.stringify(chainInfo.chainWalletOnlyCodes) === JSON.stringify(['BCH', 'BTC', 'DGB']) &&
 				chainInfo.communityMainColors.every((color) => color === 'rgb(57, 169, 255)') &&
 				chainInfo.communityChainColors.every((color) => color === 'rgb(57, 169, 255)') &&
 				chainInfo.hostedMainColors.every((color) => color === 'rgb(71, 209, 108)') &&
@@ -388,7 +388,7 @@ async function main() {
 				return { apiType: network.apiType, apiBase: network.apiBase, segwit: network.segwit };
 			};
 			return {
-				LTC: pick('LTC'), DOGE: pick('DOGE'), BTC: pick('BTC'),
+				LTC: pick('LTC'), DOGE: pick('DOGE'), STONE: pick('STONE'), BTC: pick('BTC'),
 				BCH: pick('BCH'), DGB: pick('DGB')
 			};
 		});
@@ -396,6 +396,7 @@ async function main() {
 			'default explorer types and endpoints are chain-correct',
 			defaults.LTC.apiType === 'esplora' && defaults.LTC.apiBase === 'https://litecoinspace.org/api' &&
 				defaults.DOGE.apiType === 'blockcypher' && defaults.DOGE.apiBase === 'https://api.blockcypher.com/v1/doge/main' &&
+				defaults.STONE.apiType === 'stoneapi' && defaults.STONE.apiBase === 'https://bloodstone.rocks/stone-wallet-api' && defaults.STONE.segwit === true &&
 				defaults.BTC.apiType === 'esplora' && defaults.BTC.apiBase === 'https://mempool.space/api' &&
 				defaults.BCH.apiType === 'blockbook' && defaults.BCH.apiBase === 'https://bch1.trezor.io' &&
 				defaults.DGB.apiType === 'esplora' && defaults.DGB.apiBase === 'https://digiexplorer.info/api',
@@ -408,6 +409,7 @@ async function main() {
 			const key1 = '0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798';
 			const key2 = '02c6047f9441ed7d6d3045406e95c07cd85c778e4b8cef3ca7abac09b95c709ee5';
 			const dogeMultisig = C.publicKeysToMultisig('DOGE', [key1, key2], 2);
+			const stoneMultisig = C.publicKeysToMultisig('STONE', [key1, key2], 2);
 			let dogeBech32Rejected = false;
 			let walletOnlyRejected = false;
 			try { C.publicKeyToAddress('DOGE', key1, 'bech32'); } catch (error) { dogeBech32Rejected = true; }
@@ -422,6 +424,11 @@ async function main() {
 				assetRefundLockHeight: 100480, paymentRefundLockHeight: 300060,
 				assetConfirmations: 1, paymentConfirmations: 6
 			}, 100000, 300000, 100000);
+			const stoneSafe = S.assertRefundOrdering({
+				assetChain: 'STONE', paymentChain: 'DOGE', releaseRodHeight: 100030,
+				assetRefundLockHeight: 400120, paymentRefundLockHeight: 300060,
+				assetConfirmations: 6, paymentConfirmations: 6
+			}, 400000, 300000, 100000);
 			let unsafeRejected = false;
 			try {
 				S.assertRefundOrdering({
@@ -433,11 +440,15 @@ async function main() {
 			return {
 				dogeAddress: C.publicKeyToAddress('DOGE', key1, 'legacy'),
 				dogeMultisig: dogeMultisig.address,
+				stoneAddress: C.publicKeyToAddress('STONE', key1, 'legacy'),
+				stoneMultisig: stoneMultisig.address,
 				dogeBech32Rejected,
 				walletOnlyRejected,
 				dogePolicy: C.getPolicy('DOGE'),
+				stonePolicy: C.getPolicy('STONE'),
 				ltcSafe,
 				dogeSafe,
+				stoneSafe,
 				unsafeRejected
 			};
 		});
@@ -456,9 +467,13 @@ async function main() {
 			chainChecks.walletOnlyRejected === true
 		);
 		step(
-			'refund wall-clock ordering accepts safe LTC/DOGE and rejects reversal',
+			'refund wall-clock ordering accepts safe LTC/DOGE/STONE defaults and rejects reversal',
 			chainChecks.ltcSafe.assetRemainingSeconds > chainChecks.ltcSafe.paymentRemainingSeconds &&
 				chainChecks.dogeSafe.assetRemainingSeconds > chainChecks.dogeSafe.paymentRemainingSeconds &&
+				chainChecks.stoneSafe.assetRemainingSeconds > chainChecks.stoneSafe.paymentRemainingSeconds &&
+				chainChecks.stoneAddress === 'SXyGazfm6S3xfcySmD6QNkZYmtfysC2jvc' &&
+				chainChecks.stoneMultisig === 'sKynw1attrhoCu6Er4PKm5rW9xNJwonXiH' &&
+				chainChecks.stonePolicy.relayFloorPerByte === 150 &&
 				chainChecks.unsafeRejected === true
 		);
 
