@@ -2820,6 +2820,9 @@ function rawSubmitDefault(btn){
 
 		function apiUrlForComparison(url, apiType) {
 			var trimmedUrl = trimApiUrl(url);
+			if (String(apiType || '') === 'rod') {
+				trimmedUrl = trimmedUrl.replace(/\/api$/i, '');
+			}
 			if (String(apiType || '') === 'stoneapi') {
 				trimmedUrl = trimmedUrl.replace(/\/api\/v1$/i, '');
 			}
@@ -2873,6 +2876,16 @@ function rawSubmitDefault(btn){
 			return false;
 		}
 
+		function shouldCanonicalizeProtectedApi(code, apiUrl, apiType, canonicalApi) {
+			if (!apiUrl || !canonicalApi) {
+				return true;
+			}
+			if (apiUrlForComparison(apiUrl, apiType) === apiUrlForComparison(canonicalApi.base, canonicalApi.type)) {
+				return true;
+			}
+			return conflictsWithCanonicalApi(code, apiUrl, apiType);
+		}
+
 		settings = settings || {};
 		for (var code in settings) {
 			if (!settings.hasOwnProperty(code) || !coinjs.networks[code]) {
@@ -2881,6 +2894,7 @@ function rawSubmitDefault(btn){
 
 			var canonicalApi = canonicalApiForCode(code);
 			var entry = $.extend({}, settings[code]);
+			var savedApiType = entry.apiType;
 			if (!canonicalApi) {
 				sanitized[code] = entry;
 				continue;
@@ -2888,13 +2902,17 @@ function rawSubmitDefault(btn){
 
 			if (protectedApiTypeByCode[code]) {
 				entry.apiType = canonicalApi.type;
-				entry.apiUrl = canonicalApi.base;
+				entry.apiUrl = trimApiUrl(entry.apiUrl);
+				if (savedApiType !== canonicalApi.type || shouldCanonicalizeProtectedApi(code, entry.apiUrl, savedApiType, canonicalApi)) {
+					entry.apiUrl = canonicalApi.base;
+				}
+			} else if (entry.apiUrl) {
+				entry.apiUrl = trimApiUrl(entry.apiUrl);
 			} else if (!entry.apiType) {
 				entry.apiType = canonicalApi.type;
 			}
 
 			if (!protectedApiTypeByCode[code] && entry.apiUrl) {
-				entry.apiUrl = trimApiUrl(entry.apiUrl);
 				if (conflictsWithCanonicalApi(code, entry.apiUrl, entry.apiType)) {
 					delete entry.apiUrl;
 				}

@@ -60,6 +60,37 @@
 
 	function mergeChains(saved) {
 		var merged = {};
+		var protectedApiTypeByCode = {
+			'ROD': true,
+			'STONE': true
+		};
+		function trimApiUrl(url) {
+			return $.trim(url || '').replace(/\/+$/g, '');
+		}
+		function apiUrlForComparison(url, apiType) {
+			var trimmedUrl = trimApiUrl(url);
+			if (String(apiType || '') === 'rod') {
+				trimmedUrl = trimmedUrl.replace(/\/api$/i, '');
+			}
+			if (String(apiType || '') === 'stoneapi') {
+				trimmedUrl = trimmedUrl.replace(/\/api\/v1$/i, '');
+			}
+			return trimmedUrl;
+		}
+		function conflictsWithCanonicalApi(code, apiUrl, apiType) {
+			var candidate = apiUrlForComparison(apiUrl, apiType);
+			if (!candidate) return false;
+			for (var otherCode in defaults.chains) {
+				if (!defaults.chains.hasOwnProperty(otherCode) || otherCode === code) continue;
+				var otherCanonical = defaults.chains[otherCode];
+				if (!otherCanonical || !otherCanonical.apiUrl) continue;
+				if (candidate === apiUrlForComparison(otherCanonical.apiUrl, otherCanonical.apiType) &&
+					String(otherCanonical.apiType || '') !== String(apiType || '')) {
+					return true;
+				}
+			}
+			return false;
+		}
 		for (var code in defaults.chains) {
 			if (defaults.chains.hasOwnProperty(code)) {
 				merged[code] = $.extend({}, defaults.chains[code]);
@@ -69,7 +100,18 @@
 			for (var savedCode in saved) {
 				if (saved.hasOwnProperty(savedCode) && defaults.chains[savedCode] &&
 					saved[savedCode] && typeof saved[savedCode] === 'object') {
+					var savedApiType = saved[savedCode].apiType;
 					merged[savedCode] = $.extend(merged[savedCode], saved[savedCode]);
+					if (protectedApiTypeByCode[savedCode]) {
+						merged[savedCode].apiType = defaults.chains[savedCode].apiType;
+						merged[savedCode].apiUrl = trimApiUrl(merged[savedCode].apiUrl);
+						if (savedApiType !== defaults.chains[savedCode].apiType ||
+							!merged[savedCode].apiUrl ||
+							apiUrlForComparison(merged[savedCode].apiUrl, merged[savedCode].apiType) === apiUrlForComparison(defaults.chains[savedCode].apiUrl, defaults.chains[savedCode].apiType) ||
+							conflictsWithCanonicalApi(savedCode, merged[savedCode].apiUrl, savedApiType)) {
+							merged[savedCode].apiUrl = defaults.chains[savedCode].apiUrl;
+						}
+					}
 				}
 			}
 		}

@@ -218,6 +218,9 @@ function testSavedApiSettingsSanitization() {
 		STONE: { apiUrl: 'https://api.spacexpanse.org:1234', apiType: 'stoneapi' },
 		ROD: { apiUrl: 'https://bloodstone.rocks/stone-wallet-api/api/v1', apiType: 'esplora' }
 	});
+	const staleRodApiPath = sanitizeSavedApiSettings({
+		ROD: { apiUrl: 'https://api.spacexpanse.org:1234/api', apiType: 'rod' }
+	});
 	assert.strictEqual(cleaned.STONE.apiType, 'stoneapi',
 		'STONE must keep the stoneapi driver even with stale saved settings');
 	assert.strictEqual(cleaned.STONE.apiUrl, registry.getProfile('STONE').api.base,
@@ -226,6 +229,8 @@ function testSavedApiSettingsSanitization() {
 		'ROD must keep the rod driver even with stale saved settings');
 	assert.strictEqual(cleaned.ROD.apiUrl, registry.getProfile('ROD').api.base,
 		'ROD must discard a saved STONE API base or subpath that would trigger method-not-found errors');
+	assert.strictEqual(staleRodApiPath.ROD.apiUrl, registry.getProfile('ROD').api.base,
+		'ROD must discard a saved /api subpath that would turn /balance into method-not-found');
 	const explorerSource = fs.readFileSync(path.join(root, 'js', 'otc-explorer.js'), 'utf8');
 	assert(/postRaw\(base \+ '\/api\/v1\/broadcast', txhex, 'text\/plain'\)/.test(explorerSource),
 		'STONE broadcast must avoid the broken JSON preflight by posting raw tx hex as text/plain');
@@ -300,6 +305,9 @@ function testV1ConfigIsolation() {
 	const unknown = runEngineWithSavedConfig({ chains: { DGB: { apiUrl: 'https://unsupported.invalid' } } });
 	assert.strictEqual(unknown.browser.rodOtc.engine.loadConfig().chains.DGB, undefined,
 		'wallet-only chains must not enter the v2 settlement registry through saved settings');
+	const staleRod = runEngineWithSavedConfig({ chains: { ROD: { apiUrl: 'https://api.spacexpanse.org:1234/api', apiType: 'rod' } } });
+	assert.strictEqual(staleRod.browser.rodOtc.engine.loadConfig().chains.ROD.apiUrl, 'https://api.spacexpanse.org:1234',
+		'v2 engine must ignore stale ROD /api subpaths and keep the canonical API base');
 }
 
 testDgbToRodRace();
